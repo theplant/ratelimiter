@@ -45,12 +45,6 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func resetDB() {
-	if err := db.Where("1 = 1").Delete(&ratelimiter.KV{}).Error; err != nil {
-		panic(err)
-	}
-}
-
 func setupRedis(ctx context.Context) (_ *redis.Client, _ func() error, xerr error) {
 	container, err := testredis.Run(ctx,
 		"redis:7.4.0-alpine",
@@ -324,14 +318,12 @@ func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 }
 
 func TestReverse_DriverGORM(t *testing.T) {
-	resetDB()
 	testReverse(t, ratelimiter.New(
 		ratelimiter.DriverGORM(db),
 	), "TestReverse_DriverGORM")
 }
 
 func TestAllow_DriverGORM(t *testing.T) {
-	resetDB()
 	testAllow(t, ratelimiter.New(
 		ratelimiter.DriverGORM(db),
 	), "TestAllow_DriverGORM")

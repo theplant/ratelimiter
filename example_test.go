@@ -60,8 +60,6 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 }
 
 func ExampleDriverGORM() {
-	resetDB()
-
 	limiter := ratelimiter.New(
 		ratelimiter.DriverGORM(db),
 	)
