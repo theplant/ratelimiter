@@ -117,9 +117,11 @@ func ExampleDriverGORM() {
 }
 
 func ExampleDriverRedis() {
-	limiter := ratelimiter.New(
-		ratelimiter.DriverRedis(redisCli),
-	)
+	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	if err != nil {
+		panic(err)
+	}
+	limiter := ratelimiter.New(d)
 	runExample(limiter, "ExampleDriverRedis")
 	// Output:
 	// 0s: allowed: true

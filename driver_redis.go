@@ -48,53 +48,68 @@ else
 end
 `
 
-func DriverRedis(client *redis.Client) Driver {
-	return DriverFunc(func(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
-		now := req.Now.UTC() // stripMono
-		if req.Key == "" || now.IsZero() || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
-			return nil, errors.Wrapf(ErrInvalidParameters, "%v", req)
-		}
+type RedisDriver struct {
+	client     *redis.Client
+	scriptSha1 string
+}
 
-		select {
-		case <-ctx.Done():
-			return nil, errors.Wrap(ctx.Err(), "ratelimiter: context done")
-		default:
-		}
+func InitRedisDriver(ctx context.Context, client *redis.Client) (*RedisDriver, error) {
+	res, err := client.ScriptLoad(ctx, redisScript).Result()
+	if err != nil {
+		return nil, errors.Wrap(err, "ratelimiter: failed to load lua script")
+	}
 
-		args := []any{
-			req.DurationPerToken.Microseconds(),
-			req.Burst,
-			req.Tokens,
-			now.UnixMicro(),
-			req.MaxFutureReserve.Microseconds(),
-		}
+	return &RedisDriver{
+		client:     client,
+		scriptSha1: res,
+	}, nil
+}
 
-		result, err := client.Eval(ctx, redisScript, []string{req.Key}, args...).Result()
-		if err != nil {
-			return nil, errors.Wrap(err, "ratelimiter: failed to execute lua script")
-		}
+func (d *RedisDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
+	now := req.Now.UTC() // stripMono
+	if req.Key == "" || now.IsZero() || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
+		return nil, errors.Wrapf(ErrInvalidParameters, "%v", req)
+	}
 
-		res, ok := result.([]any)
-		if !ok || len(res) != 2 {
-			return nil, errors.Wrap(errUnexpectedScriptResultFormat, "length of result")
-		}
-		status, ok := res[0].(int64)
-		if !ok {
-			return nil, errors.Wrap(errUnexpectedScriptResultFormat, "status")
-		}
-		unixMicroToAct, ok := res[1].(int64)
-		if !ok {
-			return nil, errors.Wrap(errUnexpectedScriptResultFormat, "unixMicroToAct")
-		}
+	select {
+	case <-ctx.Done():
+		return nil, errors.Wrap(ctx.Err(), "ratelimiter: context done")
+	default:
+	}
 
-		if status == -2 {
-			return nil, errors.Wrap(ErrInvalidParameters, "lua script")
-		}
+	args := []any{
+		req.DurationPerToken.Microseconds(),
+		req.Burst,
+		req.Tokens,
+		now.UnixMicro(),
+		req.MaxFutureReserve.Microseconds(),
+	}
 
-		return &Reservation{
-			ReserveRequest: req,
-			OK:             status == 0,
-			TimeToAct:      time.UnixMicro(unixMicroToAct).UTC(),
-		}, nil
-	})
+	result, err := d.client.EvalSha(ctx, d.scriptSha1, []string{req.Key}, args...).Result()
+	if err != nil {
+		return nil, errors.Wrap(err, "ratelimiter: failed to execute lua script")
+	}
+
+	res, ok := result.([]any)
+	if !ok || len(res) != 2 {
+		return nil, errors.Wrap(errUnexpectedScriptResultFormat, "length of result")
+	}
+	status, ok := res[0].(int64)
+	if !ok {
+		return nil, errors.Wrap(errUnexpectedScriptResultFormat, "status")
+	}
+	unixMicroToAct, ok := res[1].(int64)
+	if !ok {
+		return nil, errors.Wrap(errUnexpectedScriptResultFormat, "unixMicroToAct")
+	}
+
+	if status == -2 {
+		return nil, errors.Wrap(ErrInvalidParameters, "lua script")
+	}
+
+	return &Reservation{
+		ReserveRequest: req,
+		OK:             status == 0,
+		TimeToAct:      time.UnixMicro(unixMicroToAct).UTC(),
+	}, nil
 }

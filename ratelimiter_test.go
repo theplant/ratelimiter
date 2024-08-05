@@ -338,15 +338,17 @@ func TestAllow_DriverGORM(t *testing.T) {
 }
 
 func TestReverse_DriverRedis(t *testing.T) {
-	resetDB()
-	testReverse(t, ratelimiter.New(
-		ratelimiter.DriverRedis(redisCli),
-	), "TestReverse_DriverRedis")
+	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	if err != nil {
+		panic(err)
+	}
+	testReverse(t, ratelimiter.New(d), "TestReverse_DriverRedis")
 }
 
 func TestAllow_DriverRedis(t *testing.T) {
-	resetDB()
-	testAllow(t, ratelimiter.New(
-		ratelimiter.DriverRedis(redisCli),
-	), "TestAllow_DriverRedis")
+	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	if err != nil {
+		panic(err)
+	}
+	testAllow(t, ratelimiter.New(d), "TestAllow_DriverRedis")
 }

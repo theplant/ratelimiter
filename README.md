@@ -13,12 +13,11 @@ import (
 	"github.com/theplant/ratelimiter"
 )
 
-func runExample(limiter *ratelimiter.RateLimiter) {
+func runExample(limiter *ratelimiter.RateLimiter, key string) {
 	// every 10 min , burst 5
 	durationPerToken := 10 * time.Minute
 	burst := 5
 	now := time.Now()
-	key := "test_allow"
 
 	ctx := context.Background()
 
@@ -65,13 +64,13 @@ func runExample(limiter *ratelimiter.RateLimiter) {
 	}
 }
 
-func ExampleDriverGORM() {
-	resetDB()
-
-	limiter := ratelimiter.New(
-		ratelimiter.DriverGORM(db),
-	)
-	runExample(limiter)
+func ExampleDriverRedis() {
+	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	if err != nil {
+		panic(err)
+	}
+	limiter := ratelimiter.New(d)
+	runExample(limiter, "ExampleDriverRedis")
 	// Output:
 	// 0s: allowed: true
 	// 1m0s: allowed: true
