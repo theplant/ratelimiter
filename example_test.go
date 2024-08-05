@@ -116,7 +116,7 @@ func ExampleDriverGORM() {
 	// 2h44m0s: allowed: false , you can retry after 1m0s
 }
 
-func ExampleDriverRedis() {
+func ExampleInitRedisDriver() {
 	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
 	if err != nil {
 		panic(err)

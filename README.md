@@ -2,7 +2,7 @@
 
 Currently only supports GORM as the driver, with plans to integrate Redis in the future.
 
-```
+```go
 package ratelimiter_test
 
 import (
@@ -121,4 +121,26 @@ func ExampleDriverRedis() {
 	// 2h44m0s: allowed: false , you can retry after 1m0s
 }
 
+```
+
+### Benchmark
+```
+goos: darwin
+goarch: arm64
+pkg: github.com/theplant/ratelimiter
+BenchmarkDriverRedis_Reserve
+BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5
+BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5-12         	    6559	    181420 ns/op	     542 B/op	      13 allocs/op
+BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10
+BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10-12        	    6609	    183268 ns/op	     539 B/op	      13 allocs/op
+BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3
+BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3-12         	    6212	    174383 ns/op	     536 B/op	      13 allocs/op
+
+BenchmarkDriverGORM_Reserve
+BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5
+BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5-12         	    1484	    694646 ns/op	   12276 B/op	     160 allocs/op
+BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10
+BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10-12        	    1724	    689210 ns/op	   12313 B/op	     160 allocs/op
+BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3
+BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3-12         	    1712	    695863 ns/op	   12297 B/op	     160 allocs/op
 ```
