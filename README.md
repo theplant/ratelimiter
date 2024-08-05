@@ -1,6 +1,6 @@
 # ratelimiter
 
-Currently only supports GORM/Redis as the driver now.
+Currently only supports Redis / GORM as the driver now.
 
 ```go
 package ratelimiter_test
