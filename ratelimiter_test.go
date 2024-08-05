@@ -1,17 +1,25 @@
 package ratelimiter_test
 
 import (
+	"cmp"
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
+	testredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/theplant/ratelimiter"
 	"github.com/theplant/testenv"
 	"gorm.io/gorm"
 )
 
-var db *gorm.DB
+var (
+	db       *gorm.DB
+	redisCli *redis.Client
+)
 
 func TestMain(m *testing.M) {
 	env, err := testenv.New().DBEnable(true).SetUp()
@@ -27,21 +35,49 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
+	var cleanupRedis func() error
+	redisCli, cleanupRedis, err = setupRedis(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	defer cleanupRedis()
+
 	m.Run()
 }
 
-func resetDB() {
-	if err := db.Where("1 = 1").Delete(&ratelimiter.KV{}).Error; err != nil {
-		panic(err)
+func setupRedis(ctx context.Context) (_ *redis.Client, _ func() error, xerr error) {
+	container, err := testredis.Run(ctx,
+		"redis:7.4.0-alpine",
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fail to start container: %w", err)
 	}
+	defer func() {
+		if xerr != nil {
+			container.Terminate(context.Background())
+		}
+	}()
+
+	endpoint, err := container.ConnectionString(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fail to get endpoint: %w", err)
+	}
+
+	client := redis.NewClient(&redis.Options{
+		Addr: strings.TrimPrefix(endpoint, "redis://"),
+	})
+
+	return client, func() error {
+		return cmp.Or(
+			client.Close(),
+			container.Terminate(context.Background()),
+		)
+	}, nil
 }
 
-func TestReverse(t *testing.T) {
-	resetDB()
-
-	limiter := ratelimiter.New(
-		ratelimiter.DriverGORM(db),
-	)
+func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
+	durationPerToken := time.Second
+	burst := 10
 
 	now := time.Now()
 	testCases := []struct {
@@ -54,8 +90,8 @@ func TestReverse(t *testing.T) {
 			name: "invalid parameters",
 			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              "",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now,
 				Tokens:           5,
 				MaxFutureReserve: 0,
@@ -66,9 +102,9 @@ func TestReverse(t *testing.T) {
 		{
 			name: "enough tokens",
 			reserveRequest: &ratelimiter.ReserveRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now,
 				Tokens:           5,
 				MaxFutureReserve: 0,
@@ -82,9 +118,9 @@ func TestReverse(t *testing.T) {
 		{
 			name: "insufficient tokens",
 			reserveRequest: &ratelimiter.ReserveRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now,
 				Tokens:           6, // 6 tokens requested, but only 5 available
 				MaxFutureReserve: 0,
@@ -98,9 +134,9 @@ func TestReverse(t *testing.T) {
 		{
 			name: "enough tokens after waiting",
 			reserveRequest: &ratelimiter.ReserveRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now.Add(time.Second), // 6 tokens available after 1 second
 				Tokens:           6,
 				MaxFutureReserve: 0,
@@ -114,9 +150,9 @@ func TestReverse(t *testing.T) {
 		{
 			name: "MaxFutureReserve",
 			reserveRequest: &ratelimiter.ReserveRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now.Add(time.Second),
 				Tokens:           3,
 				MaxFutureReserve: 3 * time.Second, // 3 seconds in the future
@@ -130,9 +166,9 @@ func TestReverse(t *testing.T) {
 		{
 			name: "MaxFutureReserve but not enough tokens",
 			reserveRequest: &ratelimiter.ReserveRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now.Add(time.Second),
 				Tokens:           3,
 				MaxFutureReserve: 5 * time.Second, // should retry after 1 seconds with MaxFutureReserve 5 seconds
@@ -146,9 +182,9 @@ func TestReverse(t *testing.T) {
 		{
 			name: "retry after 1 second",
 			reserveRequest: &ratelimiter.ReserveRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now.Add(time.Second).Add(time.Second), // retry after 1 second
 				Tokens:           3,
 				MaxFutureReserve: 5 * time.Second,
@@ -177,7 +213,7 @@ func TestReverse(t *testing.T) {
 
 				require.Equal(t, tc.reserveRequest, r.ReserveRequest)
 				require.Equal(t, tc.expectedReservation.OK, r.OK)
-				require.True(t, r.TimeToAct.Equal(tc.expectedReservation.TimeToAct))
+				require.Equal(t, tc.expectedReservation.TimeToAct.UTC(), r.TimeToAct.UTC())
 
 				if r.OK {
 					require.PanicsWithValue(t, "ratelimiter: cannot get retry after from OK reservation", func() {
@@ -207,12 +243,9 @@ func TestReverse(t *testing.T) {
 	}
 }
 
-func TestAllow(t *testing.T) {
-	resetDB()
-
-	limiter := ratelimiter.New(
-		ratelimiter.DriverGORM(db),
-	)
+func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
+	durationPerToken := time.Second
+	burst := 10
 
 	now := time.Now()
 	testCases := []struct {
@@ -224,8 +257,8 @@ func TestAllow(t *testing.T) {
 		{
 			name: "invalid parameters",
 			allowRequest: &ratelimiter.AllowRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
+				Key:              key,
+				DurationPerToken: durationPerToken,
 				Burst:            0,
 				Now:              now,
 				Tokens:           5,
@@ -236,9 +269,9 @@ func TestAllow(t *testing.T) {
 		{
 			name: "enough tokens",
 			allowRequest: &ratelimiter.AllowRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now,
 				Tokens:           5,
 			},
@@ -248,9 +281,9 @@ func TestAllow(t *testing.T) {
 		{
 			name: "insufficient tokens",
 			allowRequest: &ratelimiter.AllowRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now,
 				Tokens:           6, // 6 tokens requested, but only 5 available
 			},
@@ -260,9 +293,9 @@ func TestAllow(t *testing.T) {
 		{
 			name: "enough tokens after waiting",
 			allowRequest: &ratelimiter.AllowRequest{
-				Key:              "test_key",
-				DurationPerToken: time.Second,
-				Burst:            10,
+				Key:              key,
+				DurationPerToken: durationPerToken,
+				Burst:            burst,
 				Now:              now.Add(time.Second), // 6 tokens available after 1 second
 				Tokens:           6,
 			},
@@ -282,4 +315,32 @@ func TestAllow(t *testing.T) {
 			require.Equal(t, tc.expectedOK, ok)
 		})
 	}
+}
+
+func TestReverse_DriverGORM(t *testing.T) {
+	testReverse(t, ratelimiter.New(
+		ratelimiter.DriverGORM(db),
+	), "TestReverse_DriverGORM")
+}
+
+func TestAllow_DriverGORM(t *testing.T) {
+	testAllow(t, ratelimiter.New(
+		ratelimiter.DriverGORM(db),
+	), "TestAllow_DriverGORM")
+}
+
+func TestReverse_DriverRedis(t *testing.T) {
+	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	if err != nil {
+		panic(err)
+	}
+	testReverse(t, ratelimiter.New(d), "TestReverse_DriverRedis")
+}
+
+func TestAllow_DriverRedis(t *testing.T) {
+	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	if err != nil {
+		panic(err)
+	}
+	testAllow(t, ratelimiter.New(d), "TestAllow_DriverRedis")
 }

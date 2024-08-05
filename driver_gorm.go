@@ -2,7 +2,6 @@ package ratelimiter
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -18,8 +17,9 @@ type KV struct {
 
 func DriverGORM(db *gorm.DB) Driver {
 	return DriverFunc(func(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
-		if req.Key == "" || req.Now.IsZero() || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
-			return nil, errors.Errorf("ratelimiter: invalid parameters: %v", req)
+		now := req.Now.UTC() // stripMono
+		if req.Key == "" || now.IsZero() || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
+			return nil, errors.Wrapf(ErrInvalidParameters, "%v", req)
 		}
 
 		select {
@@ -28,47 +28,46 @@ func DriverGORM(db *gorm.DB) Driver {
 		default:
 		}
 
-		resetValue := req.Now.Add(-time.Duration(req.Burst) * req.DurationPerToken)
+		resetValue := now.Add(-time.Duration(req.Burst) * req.DurationPerToken)
 
-		var baseTime time.Time
+		var timeBase time.Time
 		var timeToAct time.Time
 		var ok bool
 
-		db := db.WithContext(ctx)
-		err := db.Transaction(func(tx *gorm.DB) error {
+		err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			var kv KV
 
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&kv, "key = ?", req.Key).Error; err != nil {
 				if !errors.Is(err, gorm.ErrRecordNotFound) {
-					return err
+					return errors.Wrap(err, "ratelimiter: failed to get kv")
 				}
 
-				baseTime = resetValue
-				kv = KV{Key: req.Key, Value: fmt.Sprintf("%d", baseTime.UnixNano())}
+				timeBase = resetValue
+				kv = KV{Key: req.Key, Value: strconv.FormatInt(timeBase.UnixMicro(), 10)}
 				if err := tx.Create(&kv).Error; err != nil {
-					return err
+					return errors.Wrap(err, "ratelimiter: failed to create kv")
 				}
 			} else {
-				baseTimeUnix, err := strconv.ParseInt(kv.Value, 10, 64)
+				unixMicroBase, err := strconv.ParseInt(kv.Value, 10, 64)
 				if err != nil {
 					return errors.Wrap(err, "ratelimiter: failed to parse base time")
 				}
-				baseTime = time.Unix(0, baseTimeUnix)
+				timeBase = time.UnixMicro(unixMicroBase)
 
-				if baseTime.Before(resetValue) {
-					baseTime = resetValue
+				if timeBase.Before(resetValue) {
+					timeBase = resetValue
 				}
 			}
 
 			tokensDuration := req.DurationPerToken * time.Duration(req.Tokens)
-			timeToAct = baseTime.Add(tokensDuration)
+			timeToAct = timeBase.Add(tokensDuration).UTC()
 
-			if timeToAct.After(req.Now.Add(req.MaxFutureReserve)) {
+			if timeToAct.After(now.Add(req.MaxFutureReserve)) {
 				ok = false
 				return nil
 			}
 
-			kv.Value = fmt.Sprintf("%d", timeToAct.UnixNano())
+			kv.Value = strconv.FormatInt(timeToAct.UnixMicro(), 10)
 			if err := tx.Save(&kv).Error; err != nil {
 				return errors.Wrap(err, "ratelimiter: failed to save time to act")
 			}

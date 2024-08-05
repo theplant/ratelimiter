@@ -8,17 +8,17 @@ import (
 type AllowRequest struct {
 	Key              string
 	DurationPerToken time.Duration
-	Burst            int64
+	Burst            int
 	Now              time.Time
-	Tokens           int64
+	Tokens           int
 }
 
 type ReserveRequest struct {
 	Key              string
 	DurationPerToken time.Duration
-	Burst            int64
+	Burst            int
 	Now              time.Time
-	Tokens           int64
+	Tokens           int
 	MaxFutureReserve time.Duration
 }
 
