@@ -19,7 +19,7 @@ func DriverGORM(db *gorm.DB) Driver {
 	return DriverFunc(func(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
 		now := req.Now.UTC() // stripMono
 		if req.Key == "" || now.IsZero() || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
-			return nil, errors.Errorf("ratelimiter: invalid parameters: %v", req)
+			return nil, errors.Wrapf(ErrInvalidParameters, "%v", req)
 		}
 
 		select {

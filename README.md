@@ -16,7 +16,7 @@ import (
 func runExample(limiter *ratelimiter.RateLimiter) {
 	// every 10 min , burst 5
 	durationPerToken := 10 * time.Minute
-	burst := int64(5)
+	burst := 5
 	now := time.Now()
 	key := "test_allow"
 
