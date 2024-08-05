@@ -177,7 +177,7 @@ func TestReverse(t *testing.T) {
 
 				require.Equal(t, tc.reserveRequest, r.ReserveRequest)
 				require.Equal(t, tc.expectedReservation.OK, r.OK)
-				require.True(t, r.TimeToAct.Equal(tc.expectedReservation.TimeToAct))
+				require.Equal(t, tc.expectedReservation.TimeToAct.UTC(), r.TimeToAct.UTC())
 
 				if r.OK {
 					require.PanicsWithValue(t, "ratelimiter: cannot get retry after from OK reservation", func() {
