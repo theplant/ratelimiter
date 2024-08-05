@@ -2,6 +2,7 @@ package ratelimiter
 
 import (
 	"context"
+	_ "embed"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -10,43 +11,8 @@ import (
 
 var errUnexpectedScriptResultFormat = errors.New("ratelimiter: unexpected script result format")
 
-const redisScript = `
-local key = KEYS[1]
-local durationPerToken = tonumber(ARGV[1]) -- The time interval required for each token, in microseconds
-local burst = tonumber(ARGV[2]) -- Burst capacity
-local tokens = tonumber(ARGV[3]) -- Number of tokens requested
-local now = tonumber(ARGV[4]) -- Current timestamp, in microseconds
-local maxFutureReserve = tonumber(ARGV[5]) -- Maximum reservation duration, in microseconds
-
-if now <= 0 or durationPerToken <= 0 or burst <= 0 or tokens <= 0 or tokens > burst then
-	return {-2, 0} -- Indicates invalid parameters
-end
-
--- Calculate the reset value based on the current time and burst duration
-local resetValue = now - (burst * durationPerToken)
-
--- Attempt to get timeBase
-local timeBase = tonumber(redis.call("get", key))
-
--- If timeBase does not exist or is less than the calculated reset value, update it to the reset value
-if not timeBase or timeBase < resetValue then
-	timeBase = resetValue
-end
-
--- Calculate the time length occupied by the tokens
-local tokensDuration = tokens * durationPerToken
-local timeToAct = timeBase + tokensDuration
-
--- If timeToAct exceeds the maximum reservation timeout, do not update timeBase and return an error
-if timeToAct > now + maxFutureReserve then
-	return {-1, timeToAct} -- Error indicator and returns timeToAct
-else
-	-- Update timeBase to the execution time of the next request
-	redis.call("set", key, timeToAct)
-	-- Return the time point when the next action should be performed
-	return {0, timeToAct} -- Success indicator and returns timeToAct
-end
-`
+//go:embed embed/redis.lua
+var redisScript string
 
 type RedisDriver struct {
 	client     *redis.Client
