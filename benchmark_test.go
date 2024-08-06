@@ -32,7 +32,7 @@ func runBenchmarks(b *testing.B, limiter *ratelimiter.RateLimiter) {
 					Key:              tt.key,
 					DurationPerToken: tt.durationPerToken,
 					Burst:            tt.burst,
-					Now:              now.Add(time.Duration(i) * time.Second),
+					Now:              now.Add(time.Duration(i) * tt.durationPerToken),
 					Tokens:           1,
 					MaxFutureReserve: 0,
 				}

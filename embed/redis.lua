@@ -5,8 +5,15 @@ local tokens = tonumber(ARGV[3]) -- Number of tokens requested
 local now = tonumber(ARGV[4]) -- Current timestamp, in microseconds
 local maxFutureReserve = tonumber(ARGV[5]) -- Maximum reservation duration, in microseconds
 
-if now <= 0 or durationPerToken <= 0 or burst <= 0 or tokens <= 0 or tokens > burst then
+if durationPerToken <= 0 or burst <= 0 or tokens <= 0 or tokens > burst then
 	return {-2, 0} -- Indicates invalid parameters
+end
+
+if now <= 0 then
+	local time = redis.call("TIME")
+	local time_seconds = tonumber(time[1])
+	local time_microseconds = tonumber(time[2])
+	now = time_seconds * 1000000 + time_microseconds
 end
 
 -- Calculate the reset value based on the current time and burst duration

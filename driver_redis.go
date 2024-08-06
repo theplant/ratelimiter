@@ -33,7 +33,7 @@ func InitRedisDriver(ctx context.Context, client *redis.Client) (*RedisDriver, e
 
 func (d *RedisDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
 	now := req.Now.UTC() // stripMono
-	if req.Key == "" || now.IsZero() || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
+	if req.Key == "" || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
 		return nil, errors.Wrapf(ErrInvalidParameters, "%v", req)
 	}
 
