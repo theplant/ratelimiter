@@ -11,11 +11,6 @@ import (
 )
 
 func TestGormForUpdate(t *testing.T) {
-	gormDebug = true
-	defer func() {
-		gormDebug = false
-	}()
-
 	ctx := context.Background()
 	driver, err := InitGormDriver(ctx, db)
 	if err != nil {
@@ -32,7 +27,6 @@ func TestGormForUpdate(t *testing.T) {
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
-			Now:              time.Time{},
 			Tokens:           1,
 			MaxFutureReserve: 0,
 		})
@@ -60,7 +54,6 @@ func TestGormForUpdate(t *testing.T) {
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
-			Now:              time.Time{},
 			Tokens:           5,
 			MaxFutureReserve: 0,
 		})
@@ -81,7 +74,6 @@ func TestGormForUpdate(t *testing.T) {
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
-			Now:              time.Time{},
 			Tokens:           3,
 			MaxFutureReserve: 0,
 		})
@@ -112,11 +104,6 @@ func TestGormForUpdate(t *testing.T) {
 }
 
 func TestGormDuplicateCreate(t *testing.T) {
-	gormDebug = true
-	defer func() {
-		gormDebug = false
-	}()
-
 	ctx := context.Background()
 	driver, err := InitGormDriver(ctx, db)
 	if err != nil {
@@ -144,7 +131,6 @@ func TestGormDuplicateCreate(t *testing.T) {
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
-			Now:              time.Time{},
 			Tokens:           5,
 			MaxFutureReserve: 0,
 		})
@@ -160,7 +146,6 @@ func TestGormDuplicateCreate(t *testing.T) {
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
-			Now:              time.Time{},
 			Tokens:           5,
 			MaxFutureReserve: 0,
 		})

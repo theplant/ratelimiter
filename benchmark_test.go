@@ -30,10 +30,12 @@ func runBenchmarks(b *testing.B, limiter *RateLimiter) {
 					Key:              tt.key,
 					DurationPerToken: tt.durationPerToken,
 					Burst:            tt.burst,
-					Now:              now.Add(time.Duration(i) * tt.durationPerToken),
 					Tokens:           1,
 					MaxFutureReserve: 0,
 				}
+				ctx := WithNowFuncForTest(ctx, func() time.Time {
+					return now.Add(time.Duration(i) * tt.durationPerToken)
+				})
 				_, err := limiter.Reserve(ctx, reserveReq)
 				if err != nil {
 					b.Fatalf("failed to reserve: %v", err)

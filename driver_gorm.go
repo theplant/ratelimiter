@@ -67,8 +67,6 @@ type kvWrapper struct {
 	Now time.Time
 }
 
-var gormDebug = false
-
 type ctxKeyAfterQuery struct{}
 
 func isDuplicateKeyError(err error) bool {
@@ -95,7 +93,6 @@ func (d *GormDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reserva
 }
 
 func (d *GormDriver) reserve(ctx context.Context, req *ReserveRequest, idx int) (*Reservation, error) {
-	now := req.Now.UTC() // stripMono
 	if req.Key == "" || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
 		return nil, errors.Wrapf(ErrInvalidParameters, "%v", req)
 	}
@@ -104,6 +101,14 @@ func (d *GormDriver) reserve(ctx context.Context, req *ReserveRequest, idx int) 
 	case <-ctx.Done():
 		return nil, errors.Wrap(ctx.Err(), "ratelimiter: context done")
 	default:
+	}
+
+	var now time.Time
+	if Test {
+		nowFunc, exists := NowFuncFromContextForTest(ctx)
+		if exists {
+			now = nowFunc().UTC() // stripMono
+		}
 	}
 
 	var timeBase time.Time
@@ -117,7 +122,7 @@ func (d *GormDriver) reserve(ctx context.Context, req *ReserveRequest, idx int) 
 			return errors.Wrap(err, "ratelimiter: failed to get kv")
 		}
 
-		if gormDebug {
+		if Test {
 			afterQuery, ok := ctx.Value(ctxKeyAfterQuery{}).(func(kv kvWrapper))
 			if ok {
 				afterQuery(kv)
@@ -177,5 +182,6 @@ func (d *GormDriver) reserve(ctx context.Context, req *ReserveRequest, idx int) 
 		ReserveRequest: req,
 		OK:             ok,
 		TimeToAct:      timeToAct,
+		Now:            now,
 	}, nil
 }

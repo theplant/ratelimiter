@@ -32,7 +32,6 @@ func InitRedisDriver(ctx context.Context, client *redis.Client) (*RedisDriver, e
 }
 
 func (d *RedisDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
-	now := req.Now.UTC() // stripMono
 	if req.Key == "" || req.DurationPerToken <= 0 || req.Burst <= 0 || req.Tokens <= 0 || req.Tokens > req.Burst {
 		return nil, errors.Wrapf(ErrInvalidParameters, "%v", req)
 	}
@@ -43,11 +42,19 @@ func (d *RedisDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reserv
 	default:
 	}
 
+	unixMicroNow := int64(-1)
+	if Test {
+		nowFunc, exists := NowFuncFromContextForTest(ctx)
+		if exists {
+			unixMicroNow = nowFunc().UTC().UnixMicro() // stripMono
+		}
+	}
+
 	args := []any{
 		req.DurationPerToken.Microseconds(),
 		req.Burst,
 		req.Tokens,
-		now.UnixMicro(),
+		unixMicroNow,
 		req.MaxFutureReserve.Microseconds(),
 	}
 
@@ -57,7 +64,7 @@ func (d *RedisDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reserv
 	}
 
 	res, ok := result.([]any)
-	if !ok || len(res) != 2 {
+	if !ok || len(res) != 3 {
 		return nil, errors.Wrap(errUnexpectedScriptResultFormat, "length of result")
 	}
 	status, ok := res[0].(int64)
@@ -68,7 +75,10 @@ func (d *RedisDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reserv
 	if !ok {
 		return nil, errors.Wrap(errUnexpectedScriptResultFormat, "unixMicroToAct")
 	}
-
+	unixMicroNow, ok = res[2].(int64)
+	if !ok {
+		return nil, errors.Wrap(errUnexpectedScriptResultFormat, "unixMicroNow")
+	}
 	if status == -2 {
 		return nil, errors.Wrap(ErrInvalidParameters, "lua script")
 	}
@@ -77,5 +87,6 @@ func (d *RedisDriver) Reserve(ctx context.Context, req *ReserveRequest) (*Reserv
 		ReserveRequest: req,
 		OK:             status == 0,
 		TimeToAct:      time.UnixMicro(unixMicroToAct).UTC(),
+		Now:            time.UnixMicro(unixMicroNow).UTC(),
 	}, nil
 }
