@@ -7,45 +7,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/theplant/testenv"
 	"golang.org/x/sync/errgroup"
 )
-
-// var db *gorm.DB
-
-// func TestMain(m *testing.M) {
-// 	env, err := testenv.New().DBEnable(true).SetUp()
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	defer env.TearDown()
-
-// 	db = env.DB
-// 	// db.Logger = db.Logger.LogMode(logger.Info)
-
-// 	if err = db.AutoMigrate(&KV{}); err != nil {
-// 		panic(err)
-// 	}
-
-// 	m.Run()
-// }
 
 func TestGormForUpdate(t *testing.T) {
 	gormDebug = true
 	defer func() {
 		gormDebug = false
 	}()
-	env, err := testenv.New().DBEnable(true).SetUp()
-	if err != nil {
-		panic(err)
-	}
-	t.Cleanup(func() {
-		if err := env.TearDown(); err != nil {
-			t.Error(err)
-		}
-	})
-
-	db := env.DB
 
 	ctx := context.Background()
 	driver, err := InitGormDriver(ctx, db)
@@ -54,7 +23,7 @@ func TestGormForUpdate(t *testing.T) {
 	}
 	limiter := New(driver)
 
-	key := "key"
+	key := "TestGormForUpdate"
 	durationPerToken := 100 * time.Millisecond
 	burst := 10
 
@@ -148,18 +117,6 @@ func TestGormDuplicateCreate(t *testing.T) {
 		gormDebug = false
 	}()
 
-	env, err := testenv.New().DBEnable(true).SetUp()
-	if err != nil {
-		panic(err)
-	}
-	t.Cleanup(func() {
-		if err := env.TearDown(); err != nil {
-			t.Error(err)
-		}
-	})
-
-	db := env.DB
-
 	ctx := context.Background()
 	driver, err := InitGormDriver(ctx, db)
 	if err != nil {
@@ -167,7 +124,7 @@ func TestGormDuplicateCreate(t *testing.T) {
 	}
 	limiter := New(driver)
 
-	key := "key"
+	key := "TestGormDuplicateCreate"
 	durationPerToken := 100 * time.Millisecond
 	burst := 10
 

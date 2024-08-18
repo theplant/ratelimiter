@@ -1,4 +1,4 @@
-package ratelimiter_test
+package ratelimiter
 
 import (
 	"cmp"
@@ -11,7 +11,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 	testredis "github.com/testcontainers/testcontainers-go/modules/redis"
-	"github.com/theplant/ratelimiter"
 	"github.com/theplant/testenv"
 	"gorm.io/gorm"
 )
@@ -31,7 +30,7 @@ func TestMain(m *testing.M) {
 	db = env.DB
 	// db.Logger = db.Logger.LogMode(logger.Info)
 
-	if err = db.AutoMigrate(&ratelimiter.KV{}); err != nil {
+	if err = db.AutoMigrate(&KV{}); err != nil {
 		panic(err)
 	}
 
@@ -75,20 +74,20 @@ func setupRedis(ctx context.Context) (_ *redis.Client, _ func() error, xerr erro
 	}, nil
 }
 
-func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
+func testReverseWithNowAdvanced(t *testing.T, limiter *RateLimiter, key string) {
 	durationPerToken := time.Second
 	burst := 10
 
 	now := time.Now()
 	testCases := []struct {
 		name                string
-		reserveRequest      *ratelimiter.ReserveRequest
-		expectedReservation *ratelimiter.Reservation
+		reserveRequest      *ReserveRequest
+		expectedReservation *Reservation
 		expectedError       string
 	}{
 		{
 			name: "invalid parameters",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              "",
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -101,7 +100,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 		},
 		{
 			name: "enough tokens",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -109,7 +108,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 				Tokens:           5,
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true,
 				TimeToAct: now.Add(-10 * durationPerToken).Add(5 * durationPerToken),
 			},
@@ -117,7 +116,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 		},
 		{
 			name: "insufficient tokens",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -125,7 +124,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 				Tokens:           6, // 6 tokens requested, but only 5 available
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        false,
 				TimeToAct: now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 			},
@@ -133,7 +132,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 		},
 		{
 			name: "enough tokens after waiting",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -141,7 +140,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 				Tokens:           6,
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true,
 				TimeToAct: now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 			},
@@ -149,7 +148,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 		},
 		{
 			name: "MaxFutureReserve",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -157,7 +156,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 				Tokens:           3,
 				MaxFutureReserve: 3 * durationPerToken, // 3 seconds in the future
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true,
 				TimeToAct: now.Add(durationPerToken).Add(3 * durationPerToken),
 			},
@@ -165,7 +164,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 		},
 		{
 			name: "MaxFutureReserve but not enough tokens",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -173,7 +172,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 				Tokens:           3,
 				MaxFutureReserve: 5 * durationPerToken, // should retry after 1 seconds with MaxFutureReserve 5 seconds
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        false,
 				TimeToAct: now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 			},
@@ -181,7 +180,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 		},
 		{
 			name: "retry after 1 second",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -189,7 +188,7 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 				Tokens:           3,
 				MaxFutureReserve: 5 * durationPerToken,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true, // should be OK now
 				TimeToAct: now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 			},
@@ -243,20 +242,20 @@ func testReverseWithNowAdvanced(t *testing.T, limiter *ratelimiter.RateLimiter, 
 	}
 }
 
-func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
+func testAllow(t *testing.T, limiter *RateLimiter, key string) {
 	durationPerToken := time.Second
 	burst := 10
 
 	now := time.Now()
 	testCases := []struct {
 		name          string
-		allowRequest  *ratelimiter.AllowRequest
+		allowRequest  *AllowRequest
 		expectedOK    bool
 		expectedError string
 	}{
 		{
 			name: "invalid parameters",
-			allowRequest: &ratelimiter.AllowRequest{
+			allowRequest: &AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            0,
@@ -268,7 +267,7 @@ func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens",
-			allowRequest: &ratelimiter.AllowRequest{
+			allowRequest: &AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -280,7 +279,7 @@ func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 		},
 		{
 			name: "insufficient tokens",
-			allowRequest: &ratelimiter.AllowRequest{
+			allowRequest: &AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -292,7 +291,7 @@ func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens after waiting",
-			allowRequest: &ratelimiter.AllowRequest{
+			allowRequest: &AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -318,34 +317,34 @@ func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 }
 
 func TestReverseWithNowAdvanced_DriverGORM(t *testing.T) {
-	testReverseWithNowAdvanced(t, ratelimiter.New(
-		ratelimiter.NewGormDriver(db),
+	testReverseWithNowAdvanced(t, New(
+		NewGormDriver(db),
 	), "TestReverseWithNowAdvanced_DriverGORM")
 }
 
 func TestAllow_DriverGORM(t *testing.T) {
-	testAllow(t, ratelimiter.New(
-		ratelimiter.NewGormDriver(db),
+	testAllow(t, New(
+		NewGormDriver(db),
 	), "TestAllow_DriverGORM")
 }
 
 func TestReverseWithNowAdvanced_DriverRedis(t *testing.T) {
-	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	d, err := InitRedisDriver(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
-	testReverseWithNowAdvanced(t, ratelimiter.New(d), "TestReverseWithNowAdvanced_DriverRedis")
+	testReverseWithNowAdvanced(t, New(d), "TestReverseWithNowAdvanced_DriverRedis")
 }
 
 func TestAllow_DriverRedis(t *testing.T) {
-	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	d, err := InitRedisDriver(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
-	testAllow(t, ratelimiter.New(d), "TestAllow_DriverRedis")
+	testAllow(t, New(d), "TestAllow_DriverRedis")
 }
 
-func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
+func testReverse(t *testing.T, limiter *RateLimiter, key string) {
 	durationPerToken := 100 * time.Millisecond
 	burst := 10
 
@@ -353,13 +352,13 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 	testCases := []struct {
 		name                string
 		before              func()
-		reserveRequest      *ratelimiter.ReserveRequest
-		expectedReservation *ratelimiter.Reservation
+		reserveRequest      *ReserveRequest
+		expectedReservation *Reservation
 		expectedError       string
 	}{
 		{
 			name: "invalid parameters",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              "",
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -372,7 +371,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -380,7 +379,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 				Tokens:           5,
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true,
 				TimeToAct: now.Add(-10 * durationPerToken).Add(5 * durationPerToken),
 			},
@@ -388,7 +387,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 		},
 		{
 			name: "insufficient tokens",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -396,7 +395,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 				Tokens:           6, // 6 tokens requested, but only 5 available
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        false,
 				TimeToAct: now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 			},
@@ -407,7 +406,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 			before: func() {
 				time.Sleep(durationPerToken)
 			},
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -415,7 +414,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 				Tokens:           6,
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true,
 				TimeToAct: now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 			},
@@ -423,7 +422,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 		},
 		{
 			name: "MaxFutureReserve",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -431,7 +430,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 				Tokens:           3,
 				MaxFutureReserve: 3 * durationPerToken, // 3 seconds in the future
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true,
 				TimeToAct: now.Add(durationPerToken).Add(3 * durationPerToken),
 			},
@@ -439,7 +438,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 		},
 		{
 			name: "MaxFutureReserve but not enough tokens",
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -447,7 +446,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 				Tokens:           3,
 				MaxFutureReserve: 5 * durationPerToken, // should retry after 1 seconds with MaxFutureReserve 5 seconds
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        false,
 				TimeToAct: now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 			},
@@ -458,7 +457,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 			before: func() {
 				time.Sleep(durationPerToken)
 			},
-			reserveRequest: &ratelimiter.ReserveRequest{
+			reserveRequest: &ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -466,7 +465,7 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 				Tokens:           3,
 				MaxFutureReserve: 5 * durationPerToken,
 			},
-			expectedReservation: &ratelimiter.Reservation{
+			expectedReservation: &Reservation{
 				OK:        true, // should be OK now
 				TimeToAct: now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 			},
@@ -524,15 +523,15 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 }
 
 func TestReverse_DriverGORM(t *testing.T) {
-	testReverse(t, ratelimiter.New(
-		ratelimiter.NewGormDriver(db),
+	testReverse(t, New(
+		NewGormDriver(db),
 	), "TestReverse_DriverGORM")
 }
 
 func TestReverse_DriverRedis(t *testing.T) {
-	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	d, err := InitRedisDriver(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
-	testReverse(t, ratelimiter.New(d), "TestReverse_DriverRedis")
+	testReverse(t, New(d), "TestReverse_DriverRedis")
 }
