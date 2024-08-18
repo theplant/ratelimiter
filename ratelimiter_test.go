@@ -317,15 +317,15 @@ func testAllow(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 	}
 }
 
-func TestReverse_DriverGORM(t *testing.T) {
+func TestReverseWithNowAdvanced_DriverGORM(t *testing.T) {
 	testReverseWithNowAdvanced(t, ratelimiter.New(
-		ratelimiter.DriverGORM(db),
-	), "TestReverse_DriverGORM")
+		ratelimiter.NewGormDriver(db),
+	), "TestReverseWithNowAdvanced_DriverGORM")
 }
 
 func TestAllow_DriverGORM(t *testing.T) {
 	testAllow(t, ratelimiter.New(
-		ratelimiter.DriverGORM(db),
+		ratelimiter.NewGormDriver(db),
 	), "TestAllow_DriverGORM")
 }
 
@@ -521,6 +521,12 @@ func testReverse(t *testing.T, limiter *ratelimiter.RateLimiter, key string) {
 			}
 		})
 	}
+}
+
+func TestReverse_DriverGORM(t *testing.T) {
+	testReverse(t, ratelimiter.New(
+		ratelimiter.NewGormDriver(db),
+	), "TestReverse_DriverGORM")
 }
 
 func TestReverse_DriverRedis(t *testing.T) {

@@ -59,9 +59,9 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 	}
 }
 
-func ExampleDriverGORM() {
+func ExampleDriverGorm() {
 	limiter := ratelimiter.New(
-		ratelimiter.DriverGORM(db),
+		ratelimiter.NewGormDriver(db),
 	)
 	runExample(limiter, "ExampleDriverGORM")
 	// Output:

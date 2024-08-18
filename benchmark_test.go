@@ -55,6 +55,6 @@ func BenchmarkDriverRedis_Reserve(b *testing.B) {
 }
 
 func BenchmarkDriverGORM_Reserve(b *testing.B) {
-	limiter := ratelimiter.New(ratelimiter.DriverGORM(db))
+	limiter := ratelimiter.New(ratelimiter.NewGormDriver(db))
 	runBenchmarks(b, limiter)
 }
