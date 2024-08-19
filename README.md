@@ -26,11 +26,17 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
-			Now:              now.Add(delta),
 			Tokens:           1,
 			MaxFutureReserve: 0,
 		}
-		r, err := limiter.Reserve(ctx, reserveReq)
+		advancedNow := now.Add(delta)
+		r, err := limiter.Reserve(
+			// only for test, you should not use this in production !!
+			ratelimiter.WithNowFuncForTest(ctx, func() time.Time {
+				return advancedNow
+			}),
+			reserveReq,
+		)
 		if err != nil {
 			panic(err)
 		}
@@ -40,7 +46,7 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 			return true
 		}
 
-		fmt.Printf("%v: allowed: %t , you can retry after %v\n", delta, false, r.RetryAfterFrom(reserveReq.Now))
+		fmt.Printf("%v: allowed: %t , you can retry after %v\n", delta, false, r.RetryAfterFrom(advancedNow))
 		return false
 	}
 
@@ -64,13 +70,14 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 	}
 }
 
-func ExampleDriverRedis() {
+
+func ExampleInitRedisDriver() {
 	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
 	limiter := ratelimiter.New(d)
-	runExample(limiter, "ExampleDriverRedis")
+	runExample(limiter, "ExampleInitRedisDriver")
 	// Output:
 	// 0s: allowed: true
 	// 1m0s: allowed: true
@@ -130,17 +137,17 @@ goarch: arm64
 pkg: github.com/theplant/ratelimiter
 BenchmarkDriverRedis_Reserve
 BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5
-BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5-12         	    6559	    181420 ns/op	     542 B/op	      13 allocs/op
+BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5-12         	    4045	    274446 ns/op	     692 B/op	      16 allocs/op
 BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10
-BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10-12        	    6609	    183268 ns/op	     539 B/op	      13 allocs/op
+BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10-12        	    4638	    277619 ns/op	     688 B/op	      16 allocs/op
 BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3
-BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3-12         	    6212	    174383 ns/op	     536 B/op	      13 allocs/op
+BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3-12         	    4406	    274867 ns/op	     688 B/op	      16 allocs/op
 
 BenchmarkDriverGORM_Reserve
 BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5
-BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5-12         	    1484	    694646 ns/op	   12276 B/op	     160 allocs/op
+BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5-12         	    1108	    909553 ns/op	   10346 B/op	     139 allocs/op
 BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10
-BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10-12        	    1724	    689210 ns/op	   12313 B/op	     160 allocs/op
+BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10-12        	    1152	   1061490 ns/op	   12973 B/op	     166 allocs/op
 BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3
-BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3-12         	    1712	    695863 ns/op	   12297 B/op	     160 allocs/op
+BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3-12         	    1156	   1064777 ns/op	   12999 B/op	     165 allocs/op
 ```

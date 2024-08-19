@@ -9,7 +9,6 @@ type AllowRequest struct {
 	Key              string
 	DurationPerToken time.Duration
 	Burst            int
-	Now              time.Time
 	Tokens           int
 }
 
@@ -17,7 +16,6 @@ type ReserveRequest struct {
 	Key              string
 	DurationPerToken time.Duration
 	Burst            int
-	Now              time.Time
 	Tokens           int
 	MaxFutureReserve time.Duration
 }
@@ -26,6 +24,7 @@ type Reservation struct {
 	*ReserveRequest
 	OK        bool
 	TimeToAct time.Time
+	Now       time.Time
 }
 
 func (r *Reservation) DelayFrom(t time.Time) time.Duration {
@@ -83,7 +82,6 @@ func (lim *RateLimiter) Allow(ctx context.Context, req *AllowRequest) (bool, err
 		Key:              req.Key,
 		DurationPerToken: req.DurationPerToken,
 		Burst:            req.Burst,
-		Now:              req.Now,
 		Tokens:           req.Tokens,
 		MaxFutureReserve: 0,
 	}

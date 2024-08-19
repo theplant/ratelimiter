@@ -1,14 +1,12 @@
-package ratelimiter_test
+package ratelimiter
 
 import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/theplant/ratelimiter"
 )
 
-func runExample(limiter *ratelimiter.RateLimiter, key string) {
+func runExample(limiter *RateLimiter, key string) {
 	// every 10 min , burst 5
 	durationPerToken := 10 * time.Minute
 	burst := 5
@@ -17,15 +15,21 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 	ctx := context.Background()
 
 	try := func(delta time.Duration) bool {
-		reserveReq := &ratelimiter.ReserveRequest{
+		reserveReq := &ReserveRequest{
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
-			Now:              now.Add(delta),
 			Tokens:           1,
 			MaxFutureReserve: 0,
 		}
-		r, err := limiter.Reserve(ctx, reserveReq)
+		advancedNow := now.Add(delta)
+		r, err := limiter.Reserve(
+			// only for test, you should not use this in production !!
+			WithNowFuncForTest(ctx, func() time.Time {
+				return advancedNow
+			}),
+			reserveReq,
+		)
 		if err != nil {
 			panic(err)
 		}
@@ -35,7 +39,7 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 			return true
 		}
 
-		fmt.Printf("%v: allowed: %t , you can retry after %v\n", delta, false, r.RetryAfterFrom(reserveReq.Now))
+		fmt.Printf("%v: allowed: %t , you can retry after %v\n", delta, false, r.RetryAfterFrom(advancedNow))
 		return false
 	}
 
@@ -59,11 +63,11 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 	}
 }
 
-func ExampleDriverGORM() {
-	limiter := ratelimiter.New(
-		ratelimiter.DriverGORM(db),
+func ExampleNewGormDriver() {
+	limiter := New(
+		NewGormDriver(db),
 	)
-	runExample(limiter, "ExampleDriverGORM")
+	runExample(limiter, "ExampleNewGormDriver")
 	// Output:
 	// 0s: allowed: true
 	// 1m0s: allowed: true
@@ -115,12 +119,12 @@ func ExampleDriverGORM() {
 }
 
 func ExampleInitRedisDriver() {
-	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+	d, err := InitRedisDriver(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
-	limiter := ratelimiter.New(d)
-	runExample(limiter, "ExampleDriverRedis")
+	limiter := New(d)
+	runExample(limiter, "ExampleInitRedisDriver")
 	// Output:
 	// 0s: allowed: true
 	// 1m0s: allowed: true
