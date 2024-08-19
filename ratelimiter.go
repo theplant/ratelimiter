@@ -40,7 +40,7 @@ func (r *Reservation) DelayFrom(t time.Time) time.Duration {
 }
 
 func (r *Reservation) Delay() time.Duration {
-	return r.DelayFrom(r.Now)
+	return r.DelayFrom(time.Now())
 }
 
 func (r *Reservation) RetryAfterFrom(t time.Time) time.Duration {
@@ -56,7 +56,7 @@ func (r *Reservation) RetryAfterFrom(t time.Time) time.Duration {
 }
 
 func (r *Reservation) RetryAfter() time.Duration {
-	return r.RetryAfterFrom(r.Now)
+	return r.RetryAfterFrom(time.Now())
 }
 
 type Driver interface {
