@@ -10,18 +10,17 @@ func runBenchmarks(b *testing.B, limiter *RateLimiter) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name             string
 		key              string
 		durationPerToken time.Duration
 		burst            int
 	}{
-		{"Key1_Duration10ms_Burst5", "BenchmarkRedisDriver_Reserve_1", 10 * time.Millisecond, 5},
-		{"Key2_Duration20ms_Burst10", "BenchmarkRedisDriver_Reserve_2", 20 * time.Millisecond, 10},
-		{"Key3_Duration50ms_Burst3", "BenchmarkRedisDriver_Reserve_3", 50 * time.Millisecond, 3},
+		{"Key1_Duration10ms_Burst5", 10 * time.Millisecond, 5},
+		{"Key2_Duration20ms_Burst10", 20 * time.Millisecond, 10},
+		{"Key3_Duration50ms_Burst3", 50 * time.Millisecond, 3},
 	}
 
 	for _, tt := range tests {
-		b.Run(tt.name, func(b *testing.B) {
+		b.Run(tt.key, func(b *testing.B) {
 			now := time.Now()
 
 			b.ResetTimer()

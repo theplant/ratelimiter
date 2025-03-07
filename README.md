@@ -131,23 +131,25 @@ func ExampleInitRedisDriver() {
 ```
 
 ### Benchmark
+
 ```
 goos: darwin
 goarch: arm64
 pkg: github.com/theplant/ratelimiter
+cpu: Apple M3 Pro
 BenchmarkDriverRedis_Reserve
 BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5
-BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5-12         	    4045	    274446 ns/op	     692 B/op	      16 allocs/op
+BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5-12         	    4432	    268164 ns/op	     677 B/op	      16 allocs/op
 BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10
-BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10-12        	    4638	    277619 ns/op	     688 B/op	      16 allocs/op
+BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10-12        	    4605	    273537 ns/op	     672 B/op	      16 allocs/op
 BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3
-BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3-12         	    4406	    274867 ns/op	     688 B/op	      16 allocs/op
+BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3-12         	    4639	    265125 ns/op	     672 B/op	      16 allocs/op
 
 BenchmarkDriverGORM_Reserve
 BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5
-BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5-12         	    1108	    909553 ns/op	   10346 B/op	     139 allocs/op
+BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5-12         	    1166	    943641 ns/op	   12959 B/op	     166 allocs/op
 BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10
-BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10-12        	    1152	   1061490 ns/op	   12973 B/op	     166 allocs/op
+BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10-12        	    1347	    908259 ns/op	   13079 B/op	     166 allocs/op
 BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3
-BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3-12         	    1156	   1064777 ns/op	   12999 B/op	     165 allocs/op
+BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3-12         	    1357	    934328 ns/op	   13019 B/op	     166 allocs/op
 ```
