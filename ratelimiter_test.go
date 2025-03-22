@@ -8,10 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
 	testredis "github.com/testcontainers/testcontainers-go/modules/redis"
-	"github.com/theplant/testenv"
+	"github.com/testcontainers/testcontainers-go/wait"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -26,13 +30,15 @@ func TestMain(m *testing.M) {
 		Test = false
 	}()
 
-	env, err := testenv.New().DBEnable(true).SetUp()
+	var err error
+	ctx := context.Background()
+
+	var cleanupDB func() error
+	db, cleanupDB, err = setupDatabase(ctx, "", "", "", "", "")
 	if err != nil {
 		panic(err)
 	}
-	defer env.TearDown()
-
-	db = env.DB
+	defer cleanupDB()
 	// db.Logger = db.Logger.LogMode(logger.Info)
 
 	if err = db.AutoMigrate(&KV{}); err != nil {
@@ -40,7 +46,7 @@ func TestMain(m *testing.M) {
 	}
 
 	var cleanupRedis func() error
-	redisCli, cleanupRedis, err = setupRedis(context.Background())
+	redisCli, cleanupRedis, err = setupRedis(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -49,9 +55,76 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
+func setupDatabase(ctx context.Context, image, dbUser, dbPass, dbName, hostPort string) (_ *gorm.DB, _ func() error, xerr error) {
+	image = cmp.Or(image, "postgres:17.4-alpine3.21")
+	dbUser = cmp.Or(dbUser, "postgres")
+	dbPass = cmp.Or(dbPass, "postgres")
+	dbName = cmp.Or(dbName, "postgres")
+	req := testcontainers.ContainerRequest{
+		Image:        image,
+		ExposedPorts: []string{"5432/tcp"},
+		Env: map[string]string{
+			"POSTGRES_USER":     dbUser,
+			"POSTGRES_PASSWORD": dbPass,
+			"POSTGRES_DB":       dbName,
+		},
+		Cmd:        []string{"postgres", "-c", "fsync=off"},
+		WaitingFor: wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+	}
+	if hostPort != "" {
+		req.HostConfigModifier = func(hostConfig *container.HostConfig) {
+			hostConfig.PortBindings = map[nat.Port][]nat.PortBinding{
+				"5432/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: hostPort,
+					},
+				},
+			}
+		}
+	}
+	container, err := testcontainers.GenericContainer(ctx,
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: req,
+			Started:          true,
+		},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fail to start container: %w", err)
+	}
+	defer func() {
+		if xerr != nil {
+			container.Terminate(context.Background())
+		}
+	}()
+
+	endpoint, err := container.Endpoint(ctx, "")
+	if err != nil {
+		return nil, nil, fmt.Errorf("fail to get endpoint: %w", err)
+	}
+	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", dbUser, dbPass, endpoint, dbName)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, nil, fmt.Errorf("no underlying sqlDB: %w", err)
+	}
+
+	return db, func() error {
+		return cmp.Or(
+			sqlDB.Close(),
+			container.Terminate(context.Background()),
+		)
+	}, nil
+}
+
 func setupRedis(ctx context.Context) (_ *redis.Client, _ func() error, xerr error) {
 	container, err := testredis.Run(ctx,
-		"redis:7.4.0-alpine",
+		"redis:8.0-M04-alpine",
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fail to start container: %w", err)
