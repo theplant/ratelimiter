@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func runBenchmarks(b *testing.B, limiter *RateLimiter) {
+func runBenchmarks(b *testing.B, limiter RateLimiter) {
 	ctx := context.Background()
 
 	tests := []struct {
@@ -44,16 +44,18 @@ func runBenchmarks(b *testing.B, limiter *RateLimiter) {
 	}
 }
 
-func BenchmarkDriverRedis_Reserve(b *testing.B) {
-	driver, err := InitRedisDriver(context.Background(), redisCli)
+func BenchmarkRedisRateLimiter_Reserve(b *testing.B) {
+	limiter, err := NewRedisRateLimiter(context.Background(), redisCli)
 	if err != nil {
-		b.Fatalf("failed to initialize Redis driver: %v", err)
+		b.Fatalf("failed to initialize Redis rate limiter: %v", err)
 	}
-	limiter := New(driver)
 	runBenchmarks(b, limiter)
 }
 
-func BenchmarkDriverGORM_Reserve(b *testing.B) {
-	limiter := New(NewGormDriver(db))
+func BenchmarkSQLRateLimiter_Reserve(b *testing.B) {
+	limiter, err := NewSQLRateLimiter(db, "kvs")
+	if err != nil {
+		b.Fatal(err)
+	}
 	runBenchmarks(b, limiter)
 }

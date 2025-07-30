@@ -1,6 +1,6 @@
 # ratelimiter
 
-Currently only supports Redis / GORM as the driver now.
+Currently supports Redis and SQL (GORM) storage backends.
 
 ```go
 package ratelimiter_test
@@ -46,7 +46,7 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 			return true
 		}
 
-		fmt.Printf("%v: allowed: %t , you can retry after %v\n", delta, false, r.RetryAfterFrom(advancedNow))
+		fmt.Printf("%v: allowed: %t , you can retry after %v\n", delta, false, r.MustRetryAfterFrom(advancedNow))
 		return false
 	}
 
@@ -71,13 +71,12 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 }
 
 
-func ExampleInitRedisDriver() {
-	d, err := ratelimiter.InitRedisDriver(context.Background(), redisCli)
+func ExampleNewRedisRateLimiter() {
+	limiter, err := ratelimiter.NewRedisRateLimiter(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
-	limiter := ratelimiter.New(d)
-	runExample(limiter, "ExampleInitRedisDriver")
+	runExample(limiter, "ExampleNewRedisRateLimiter")
 	// Output:
 	// 0s: allowed: true
 	// 1m0s: allowed: true
@@ -128,28 +127,46 @@ func ExampleInitRedisDriver() {
 	// 2h44m0s: allowed: false , you can retry after 1m0s
 }
 
-```
+func ExampleNewSQLRateLimiter() {
+	// Create SQL rate limiter with custom table name
+	limiter, err := ratelimiter.NewSQLRateLimiter(db, "rate_limits")
+	if err != nil {
+		panic(err)
+	}
+
+	// Optional: create table if it doesn't exist
+	ctx := context.Background()
+	if err := limiter.Migrate(ctx); err != nil {
+		panic(err)
+	}
+
+	runExample(limiter, "ExampleNewSQLRateLimiter")
+}
 
 ### Benchmark
 
 ```
+
 goos: darwin
 goarch: arm64
 pkg: github.com/theplant/ratelimiter
 cpu: Apple M3 Pro
-BenchmarkDriverRedis_Reserve
-BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5
-BenchmarkDriverRedis_Reserve/Key1_Duration10ms_Burst5-12         	    4432	    268164 ns/op	     677 B/op	      16 allocs/op
-BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10
-BenchmarkDriverRedis_Reserve/Key2_Duration20ms_Burst10-12        	    4605	    273537 ns/op	     672 B/op	      16 allocs/op
-BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3
-BenchmarkDriverRedis_Reserve/Key3_Duration50ms_Burst3-12         	    4639	    265125 ns/op	     672 B/op	      16 allocs/op
+BenchmarkRedisRateLimiter_Reserve
+BenchmarkRedisRateLimiter_Reserve/Key1_Duration10ms_Burst5
+BenchmarkRedisRateLimiter_Reserve/Key1_Duration10ms_Burst5-12 4432 268164 ns/op 677 B/op 16 allocs/op
+BenchmarkRedisRateLimiter_Reserve/Key2_Duration20ms_Burst10
+BenchmarkRedisRateLimiter_Reserve/Key2_Duration20ms_Burst10-12 4605 273537 ns/op 672 B/op 16 allocs/op
+BenchmarkRedisRateLimiter_Reserve/Key3_Duration50ms_Burst3
+BenchmarkRedisRateLimiter_Reserve/Key3_Duration50ms_Burst3-12 4639 265125 ns/op 672 B/op 16 allocs/op
 
-BenchmarkDriverGORM_Reserve
-BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5
-BenchmarkDriverGORM_Reserve/Key1_Duration10ms_Burst5-12         	    1166	    943641 ns/op	   12959 B/op	     166 allocs/op
-BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10
-BenchmarkDriverGORM_Reserve/Key2_Duration20ms_Burst10-12        	    1347	    908259 ns/op	   13079 B/op	     166 allocs/op
-BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3
-BenchmarkDriverGORM_Reserve/Key3_Duration50ms_Burst3-12         	    1357	    934328 ns/op	   13019 B/op	     166 allocs/op
+BenchmarkSQLRateLimiter_Reserve
+BenchmarkSQLRateLimiter_Reserve/Key1_Duration10ms_Burst5
+BenchmarkSQLRateLimiter_Reserve/Key1_Duration10ms_Burst5-12 1166 943641 ns/op 12959 B/op 166 allocs/op
+BenchmarkSQLRateLimiter_Reserve/Key2_Duration20ms_Burst10
+BenchmarkSQLRateLimiter_Reserve/Key2_Duration20ms_Burst10-12 1347 908259 ns/op 13079 B/op 166 allocs/op
+BenchmarkSQLRateLimiter_Reserve/Key3_Duration50ms_Burst3
+BenchmarkSQLRateLimiter_Reserve/Key3_Duration50ms_Burst3-12 1357 934328 ns/op 13019 B/op 166 allocs/op
+
+```
+
 ```

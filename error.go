@@ -2,4 +2,4 @@ package ratelimiter
 
 import "github.com/pkg/errors"
 
-var ErrInvalidParameters = errors.New("ratelimiter: invalid parameters")
+var ErrInvalidReserveRequest = errors.New("invalid request")
