@@ -1,12 +1,16 @@
-package ratelimiter
+package ratelimiter_test
 
 import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/theplant/ratelimiter"
+	"github.com/theplant/ratelimiter/redisrl"
+	"github.com/theplant/ratelimiter/sqlrl"
 )
 
-func runBenchmarks(b *testing.B, limiter RateLimiter) {
+func runBenchmarks(b *testing.B, limiter ratelimiter.RateLimiter) {
 	ctx := context.Background()
 
 	tests := []struct {
@@ -25,14 +29,14 @@ func runBenchmarks(b *testing.B, limiter RateLimiter) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				reserveReq := &ReserveRequest{
+				reserveReq := &ratelimiter.ReserveRequest{
 					Key:              tt.key,
 					DurationPerToken: tt.durationPerToken,
 					Burst:            tt.burst,
 					Tokens:           1,
 					MaxFutureReserve: 0,
 				}
-				ctx := WithNowFuncForTest(ctx, func() time.Time {
+				ctx := ratelimiter.WithNowFuncForTest(ctx, func() time.Time {
 					return now.Add(time.Duration(i) * tt.durationPerToken)
 				})
 				_, err := limiter.Reserve(ctx, reserveReq)
@@ -45,7 +49,7 @@ func runBenchmarks(b *testing.B, limiter RateLimiter) {
 }
 
 func BenchmarkRedisRateLimiter_Reserve(b *testing.B) {
-	limiter, err := NewRedisRateLimiter(context.Background(), redisCli)
+	limiter, err := redisrl.New(context.Background(), redisCli)
 	if err != nil {
 		b.Fatalf("failed to initialize Redis rate limiter: %v", err)
 	}
@@ -53,7 +57,7 @@ func BenchmarkRedisRateLimiter_Reserve(b *testing.B) {
 }
 
 func BenchmarkSQLRateLimiter_Reserve(b *testing.B) {
-	limiter, err := NewSQLRateLimiter(db, "kvs")
+	limiter, err := sqlrl.New(db, "kvs")
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -1,18 +1,49 @@
-package ratelimiter
+package sqlrl
 
 import (
 	"context"
+	"log"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/theplant/ratelimiter"
+	"github.com/theplant/testenv"
 	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
 )
 
+var db *gorm.DB
+
+func TestMain(m *testing.M) {
+	var err error
+	env, err := testenv.New().DBEnable(true).SetUp()
+	if err != nil {
+		panic(err)
+	}
+	defer env.TearDown()
+
+	db = env.DB
+
+	// Create SQL rate limiter and migrate table
+	sqlLimiter, err := New(db, "kvs")
+	if err != nil {
+		log.Fatalf("Failed to create SQL rate limiter: %v", err)
+	}
+
+	// Use Migrate method to create the table
+	ctx := context.Background()
+	if err := sqlLimiter.Migrate(ctx); err != nil {
+		log.Fatalf("Failed to migrate table: %v", err)
+	}
+
+	m.Run()
+}
+
 func TestSQLRateLimiterForUpdate(t *testing.T) {
-	ctx := withTestMode(context.Background())
-	limiter, err := NewSQLRateLimiter(db, "kvs")
+	ctx := ratelimiter.WithTestMode(context.Background())
+	limiter, err := New(db, "kvs")
 	require.NoError(t, err)
 
 	key := "TestSQLForUpdate"
@@ -21,7 +52,7 @@ func TestSQLRateLimiterForUpdate(t *testing.T) {
 
 	// Initial setup - consume some tokens
 	{
-		r, err := limiter.Reserve(ctx, &ReserveRequest{
+		r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
@@ -48,7 +79,7 @@ func TestSQLRateLimiterForUpdate(t *testing.T) {
 			time.Sleep(time.Second)
 			d = time.Now()
 		})
-		r, err := limiter.Reserve(ctx, &ReserveRequest{
+		r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
@@ -68,7 +99,7 @@ func TestSQLRateLimiterForUpdate(t *testing.T) {
 			nowE = kv.Now // need to ensure now is the time after blocking
 			e = time.Now()
 		})
-		r, err := limiter.Reserve(ctx, &ReserveRequest{
+		r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
@@ -101,8 +132,8 @@ func TestSQLRateLimiterForUpdate(t *testing.T) {
 }
 
 func TestSQLRateLimiterDuplicateCreate(t *testing.T) {
-	ctx := withTestMode(context.Background())
-	limiter, err := NewSQLRateLimiter(db, "kvs")
+	ctx := ratelimiter.WithTestMode(context.Background())
+	limiter, err := New(db, "kvs")
 	require.NoError(t, err)
 
 	key := "TestSQLDuplicateCreate"
@@ -121,7 +152,7 @@ func TestSQLRateLimiterDuplicateCreate(t *testing.T) {
 	var errG errgroup.Group
 	errG.Go(func() error {
 		ctx := context.WithValue(ctx, ctxKeyAfterQuery{}, afterQuery)
-		r, err := limiter.Reserve(ctx, &ReserveRequest{
+		r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
@@ -136,7 +167,7 @@ func TestSQLRateLimiterDuplicateCreate(t *testing.T) {
 	})
 	errG.Go(func() error {
 		ctx := context.WithValue(ctx, ctxKeyAfterQuery{}, afterQuery)
-		r, err := limiter.Reserve(ctx, &ReserveRequest{
+		r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
@@ -158,7 +189,7 @@ func TestSQLRateLimiterCustomTable(t *testing.T) {
 	ctx := context.Background()
 
 	// Create SQL rate limiter with custom table name
-	limiter, err := NewSQLRateLimiter(db, "custom_rate_limits")
+	limiter, err := New(db, "custom_rate_limits")
 	require.NoError(t, err)
 
 	// Create table
@@ -170,7 +201,7 @@ func TestSQLRateLimiterCustomTable(t *testing.T) {
 	burst := 5
 
 	// Test that it works with custom table name
-	r, err := limiter.Reserve(ctx, &ReserveRequest{
+	r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 		Key:              key,
 		DurationPerToken: durationPerToken,
 		Burst:            burst,
@@ -191,7 +222,7 @@ func TestSQLRateLimiterMigrate(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with a new table name that doesn't exist
-	limiter, err := NewSQLRateLimiter(db, "migrate_test_table")
+	limiter, err := New(db, "migrate_test_table")
 	require.NoError(t, err)
 
 	// Migrate should create the table
@@ -209,7 +240,7 @@ func TestSQLRateLimiterMigrate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test that rate limiting works with the migrated table
-	reservation, err := limiter.Reserve(ctx, &ReserveRequest{
+	reservation, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 		Key:              "test_migrate_key",
 		Tokens:           1,
 		Burst:            5,
@@ -237,7 +268,7 @@ func TestSQLRateLimiterConcurrentMigrate(t *testing.T) {
 
 	for i := 0; i < numGoroutines; i++ {
 		errG.Go(func() error {
-			limiter, err := NewSQLRateLimiter(db, tableName)
+			limiter, err := New(db, tableName)
 			if err != nil {
 				return err
 			}
@@ -256,10 +287,10 @@ func TestSQLRateLimiterConcurrentMigrate(t *testing.T) {
 	require.Equal(t, int64(0), count, "Table should be empty after creation")
 
 	// Test that the table is fully functional
-	limiter, err := NewSQLRateLimiter(db, tableName)
+	limiter, err := New(db, tableName)
 	require.NoError(t, err)
 
-	reservation, err := limiter.Reserve(ctx, &ReserveRequest{
+	reservation, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 		Key:              "concurrent_test_key",
 		Tokens:           1,
 		Burst:            5,
@@ -302,13 +333,13 @@ func TestNewSQLRateLimiterValidation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var limiter *SQLRateLimiter
+			var limiter *RateLimiter
 			var err error
 
 			if tc.db == nil {
-				limiter, err = NewSQLRateLimiter(nil, tc.tableName)
+				limiter, err = New(nil, tc.tableName)
 			} else {
-				limiter, err = NewSQLRateLimiter(db, tc.tableName)
+				limiter, err = New(db, tc.tableName)
 			}
 
 			if tc.expectError {
@@ -327,7 +358,7 @@ func TestSQLRateLimiterBigIntDataType(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with a specific table for BIGINT testing
-	limiter, err := NewSQLRateLimiter(db, "bigint_test_table")
+	limiter, err := New(db, "bigint_test_table")
 	require.NoError(t, err)
 
 	// Create table using Migrate
@@ -338,7 +369,7 @@ func TestSQLRateLimiterBigIntDataType(t *testing.T) {
 	testKey := "bigint_test_key"
 
 	// Test basic functionality
-	r, err := limiter.Reserve(ctx, &ReserveRequest{
+	r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 		Key:              testKey,
 		DurationPerToken: 100 * time.Millisecond,
 		Burst:            5,
@@ -349,7 +380,7 @@ func TestSQLRateLimiterBigIntDataType(t *testing.T) {
 	require.True(t, r.OK)
 
 	// Verify data storage and retrieval works correctly
-	r2, err := limiter.Reserve(ctx, &ReserveRequest{
+	r2, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
 		Key:              testKey,
 		DurationPerToken: 100 * time.Millisecond,
 		Burst:            5,

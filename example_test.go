@@ -1,12 +1,16 @@
-package ratelimiter
+package ratelimiter_test
 
 import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/theplant/ratelimiter"
+	"github.com/theplant/ratelimiter/redisrl"
+	"github.com/theplant/ratelimiter/sqlrl"
 )
 
-func runExample(limiter RateLimiter, key string) {
+func runExample(limiter ratelimiter.RateLimiter, key string) {
 	// every 10 min , burst 5
 	durationPerToken := 10 * time.Minute
 	burst := 5
@@ -15,7 +19,7 @@ func runExample(limiter RateLimiter, key string) {
 	ctx := context.Background()
 
 	try := func(delta time.Duration) bool {
-		reserveReq := &ReserveRequest{
+		reserveReq := &ratelimiter.ReserveRequest{
 			Key:              key,
 			DurationPerToken: durationPerToken,
 			Burst:            burst,
@@ -25,7 +29,7 @@ func runExample(limiter RateLimiter, key string) {
 		advancedNow := now.Add(delta)
 		r, err := limiter.Reserve(
 			// only for test, you should not use this in production !!
-			WithNowFuncForTest(ctx, func() time.Time {
+			ratelimiter.WithNowFuncForTest(ctx, func() time.Time {
 				return advancedNow
 			}),
 			reserveReq,
@@ -35,11 +39,17 @@ func runExample(limiter RateLimiter, key string) {
 		}
 
 		if r.OK {
-			fmt.Printf("%v: allowed: %t\n", delta, r.OK)
+			delay := r.MustDelayFrom(advancedNow)
+			if delay == 0 {
+				fmt.Printf("%v: allowed, act now\n", delta)
+			} else {
+				fmt.Printf("%v: allowed, act in %v\n", delta, delay)
+			}
 			return true
 		}
 
-		fmt.Printf("%v: allowed: %t , you can retry after %v\n", delta, false, r.MustRetryAfterFrom(advancedNow))
+		retryAfter := r.MustRetryAfterFrom(advancedNow)
+		fmt.Printf("%v: denied, retry in %v\n", delta, retryAfter)
 		return false
 	}
 
@@ -63,9 +73,9 @@ func runExample(limiter RateLimiter, key string) {
 	}
 }
 
-func ExampleNewSQLRateLimiter() {
+func Example_sqlRateLimiter() {
 	// Create SQL rate limiter with custom table name
-	limiter, err := NewSQLRateLimiter(db, "example_rate_limits")
+	limiter, err := sqlrl.New(db, "example_rate_limits")
 	if err != nil {
 		panic(err)
 	}
@@ -76,61 +86,109 @@ func ExampleNewSQLRateLimiter() {
 		panic(err)
 	}
 
-	runExample(limiter, "ExampleNewSQLRateLimiter")
+	runExample(limiter, "Example_sqlRateLimiter")
+	// Output:
+	// 0s: allowed, act now
+	// 1m0s: allowed, act now
+	// 2m0s: allowed, act now
+	// 3m0s: allowed, act now
+	// 4m0s: allowed, act now
+	// 5m0s: denied, retry in 5m0s
+	// 6m0s: denied, retry in 4m0s
+	// 7m0s: denied, retry in 3m0s
+	// 8m0s: denied, retry in 2m0s
+	// 9m0s: denied, retry in 1m0s
+	// 10m0s: allowed, act now
+	// 11m0s: denied, retry in 9m0s
+	// 12m0s: denied, retry in 8m0s
+	// 13m0s: denied, retry in 7m0s
+	// 14m0s: denied, retry in 6m0s
+	// 15m0s: denied, retry in 5m0s
+	// 16m0s: denied, retry in 4m0s
+	// 17m0s: denied, retry in 3m0s
+	// 18m0s: denied, retry in 2m0s
+	// 19m0s: denied, retry in 1m0s
+	// 20m0s: allowed, act now
+	// 21m0s: denied, retry in 9m0s
+	// 22m0s: denied, retry in 8m0s
+	// 23m0s: denied, retry in 7m0s
+	// 24m0s: denied, retry in 6m0s
+	// --- Sleep 20 minutes ---
+	// 45m0s: allowed, act now
+	// 46m0s: allowed, act now
+	// 47m0s: denied, retry in 3m0s
+	// 48m0s: denied, retry in 2m0s
+	// 49m0s: denied, retry in 1m0s
+	// 50m0s: allowed, act now
+	// 51m0s: denied, retry in 9m0s
+	// 52m0s: denied, retry in 8m0s
+	// 53m0s: denied, retry in 7m0s
+	// 54m0s: denied, retry in 6m0s
+	// --- Sleep 100 minutes ---
+	// 2h35m0s: allowed, act now
+	// 2h36m0s: allowed, act now
+	// 2h37m0s: allowed, act now
+	// 2h38m0s: allowed, act now
+	// 2h39m0s: allowed, act now
+	// 2h40m0s: denied, retry in 5m0s
+	// 2h41m0s: denied, retry in 4m0s
+	// 2h42m0s: denied, retry in 3m0s
+	// 2h43m0s: denied, retry in 2m0s
+	// 2h44m0s: denied, retry in 1m0s
 }
 
-func ExampleNewRedisRateLimiter() {
-	limiter, err := NewRedisRateLimiter(context.Background(), redisCli)
+func Example_redisRateLimiter() {
+	limiter, err := redisrl.New(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
-	runExample(limiter, "ExampleNewRedisRateLimiter")
+	runExample(limiter, "Example_redisRateLimiter")
 	// Output:
-	// 0s: allowed: true
-	// 1m0s: allowed: true
-	// 2m0s: allowed: true
-	// 3m0s: allowed: true
-	// 4m0s: allowed: true
-	// 5m0s: allowed: false , you can retry after 5m0s
-	// 6m0s: allowed: false , you can retry after 4m0s
-	// 7m0s: allowed: false , you can retry after 3m0s
-	// 8m0s: allowed: false , you can retry after 2m0s
-	// 9m0s: allowed: false , you can retry after 1m0s
-	// 10m0s: allowed: true
-	// 11m0s: allowed: false , you can retry after 9m0s
-	// 12m0s: allowed: false , you can retry after 8m0s
-	// 13m0s: allowed: false , you can retry after 7m0s
-	// 14m0s: allowed: false , you can retry after 6m0s
-	// 15m0s: allowed: false , you can retry after 5m0s
-	// 16m0s: allowed: false , you can retry after 4m0s
-	// 17m0s: allowed: false , you can retry after 3m0s
-	// 18m0s: allowed: false , you can retry after 2m0s
-	// 19m0s: allowed: false , you can retry after 1m0s
-	// 20m0s: allowed: true
-	// 21m0s: allowed: false , you can retry after 9m0s
-	// 22m0s: allowed: false , you can retry after 8m0s
-	// 23m0s: allowed: false , you can retry after 7m0s
-	// 24m0s: allowed: false , you can retry after 6m0s
+	// 0s: allowed, act now
+	// 1m0s: allowed, act now
+	// 2m0s: allowed, act now
+	// 3m0s: allowed, act now
+	// 4m0s: allowed, act now
+	// 5m0s: denied, retry in 5m0s
+	// 6m0s: denied, retry in 4m0s
+	// 7m0s: denied, retry in 3m0s
+	// 8m0s: denied, retry in 2m0s
+	// 9m0s: denied, retry in 1m0s
+	// 10m0s: allowed, act now
+	// 11m0s: denied, retry in 9m0s
+	// 12m0s: denied, retry in 8m0s
+	// 13m0s: denied, retry in 7m0s
+	// 14m0s: denied, retry in 6m0s
+	// 15m0s: denied, retry in 5m0s
+	// 16m0s: denied, retry in 4m0s
+	// 17m0s: denied, retry in 3m0s
+	// 18m0s: denied, retry in 2m0s
+	// 19m0s: denied, retry in 1m0s
+	// 20m0s: allowed, act now
+	// 21m0s: denied, retry in 9m0s
+	// 22m0s: denied, retry in 8m0s
+	// 23m0s: denied, retry in 7m0s
+	// 24m0s: denied, retry in 6m0s
 	// --- Sleep 20 minutes ---
-	// 45m0s: allowed: true
-	// 46m0s: allowed: true
-	// 47m0s: allowed: false , you can retry after 3m0s
-	// 48m0s: allowed: false , you can retry after 2m0s
-	// 49m0s: allowed: false , you can retry after 1m0s
-	// 50m0s: allowed: true
-	// 51m0s: allowed: false , you can retry after 9m0s
-	// 52m0s: allowed: false , you can retry after 8m0s
-	// 53m0s: allowed: false , you can retry after 7m0s
-	// 54m0s: allowed: false , you can retry after 6m0s
+	// 45m0s: allowed, act now
+	// 46m0s: allowed, act now
+	// 47m0s: denied, retry in 3m0s
+	// 48m0s: denied, retry in 2m0s
+	// 49m0s: denied, retry in 1m0s
+	// 50m0s: allowed, act now
+	// 51m0s: denied, retry in 9m0s
+	// 52m0s: denied, retry in 8m0s
+	// 53m0s: denied, retry in 7m0s
+	// 54m0s: denied, retry in 6m0s
 	// --- Sleep 100 minutes ---
-	// 2h35m0s: allowed: true
-	// 2h36m0s: allowed: true
-	// 2h37m0s: allowed: true
-	// 2h38m0s: allowed: true
-	// 2h39m0s: allowed: true
-	// 2h40m0s: allowed: false , you can retry after 5m0s
-	// 2h41m0s: allowed: false , you can retry after 4m0s
-	// 2h42m0s: allowed: false , you can retry after 3m0s
-	// 2h43m0s: allowed: false , you can retry after 2m0s
-	// 2h44m0s: allowed: false , you can retry after 1m0s
+	// 2h35m0s: allowed, act now
+	// 2h36m0s: allowed, act now
+	// 2h37m0s: allowed, act now
+	// 2h38m0s: allowed, act now
+	// 2h39m0s: allowed, act now
+	// 2h40m0s: denied, retry in 5m0s
+	// 2h41m0s: denied, retry in 4m0s
+	// 2h42m0s: denied, retry in 3m0s
+	// 2h43m0s: denied, retry in 2m0s
+	// 2h44m0s: denied, retry in 1m0s
 }

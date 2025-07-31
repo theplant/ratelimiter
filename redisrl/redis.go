@@ -1,4 +1,4 @@
-package ratelimiter
+package redisrl
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
+	"github.com/theplant/ratelimiter"
 )
 
 var (
@@ -17,26 +18,26 @@ var (
 //go:embed embed/redis.lua
 var redisScript string
 
-// RedisRateLimiter implements the RateLimiter interface using Redis as the storage backend.
+// RateLimiter implements the RateLimiter interface using Redis as the storage backend.
 // It uses a Lua script to ensure atomic operations and high performance.
-type RedisRateLimiter struct {
+type RateLimiter struct {
 	client     *redis.Client
 	scriptSha1 string
 }
 
 // Ensure RedisRateLimiter implements the RateLimiter interface
-var _ RateLimiter = &RedisRateLimiter{}
+var _ ratelimiter.RateLimiter = &RateLimiter{}
 
-// NewRedisRateLimiter creates and initializes a new RedisRateLimiter.
+// New creates and initializes a new RedisRateLimiter.
 // It loads the required Lua script into Redis and returns a configured rate limiter.
 // The script SHA1 is cached to avoid reloading on each operation.
-func NewRedisRateLimiter(ctx context.Context, client *redis.Client) (*RedisRateLimiter, error) {
+func New(ctx context.Context, client *redis.Client) (*RateLimiter, error) {
 	res, err := client.ScriptLoad(ctx, redisScript).Result()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load lua script")
 	}
 
-	return &RedisRateLimiter{
+	return &RateLimiter{
 		client:     client,
 		scriptSha1: res,
 	}, nil
@@ -45,14 +46,14 @@ func NewRedisRateLimiter(ctx context.Context, client *redis.Client) (*RedisRateL
 // Allow checks if the specified number of tokens are available immediately.
 // It returns true if the request can be satisfied without waiting, false otherwise.
 // This method is implemented as a Reserve operation with MaxFutureReserve set to 0.
-func (r *RedisRateLimiter) Allow(ctx context.Context, req *AllowRequest) (bool, error) {
-	return Allow(ctx, r, req)
+func (r *RateLimiter) Allow(ctx context.Context, req *ratelimiter.AllowRequest) (bool, error) {
+	return ratelimiter.Allow(ctx, r, req)
 }
 
 // Reserve attempts to reserve the specified number of tokens.
 // It returns a Reservation indicating whether the request was successful
 // and when the action should be performed.
-func (r *RedisRateLimiter) Reserve(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
+func (r *RateLimiter) Reserve(ctx context.Context, req *ratelimiter.ReserveRequest) (*ratelimiter.Reservation, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
@@ -64,8 +65,8 @@ func (r *RedisRateLimiter) Reserve(ctx context.Context, req *ReserveRequest) (*R
 	}
 
 	unixMicroNow := int64(-1)
-	if isTestMode(ctx) {
-		nowFunc, exists := nowFuncFromContextForTest(ctx)
+	if ratelimiter.IsTestMode(ctx) {
+		nowFunc, exists := ratelimiter.NowFuncFromContextForTest(ctx)
 		if exists {
 			unixMicroNow = nowFunc().UTC().UnixMicro() // stripMono
 		}
@@ -101,10 +102,10 @@ func (r *RedisRateLimiter) Reserve(ctx context.Context, req *ReserveRequest) (*R
 		return nil, errors.Wrap(errUnexpectedScriptResultFormat, "unixMicroNow")
 	}
 	if status == -2 {
-		return nil, errLuaScriptFailed
+		return nil, errors.WithStack(errLuaScriptFailed)
 	}
 
-	return &Reservation{
+	return &ratelimiter.Reservation{
 		ReserveRequest: req,
 		OK:             status == 0,
 		TimeToAct:      time.UnixMicro(unixMicroToAct).UTC(),

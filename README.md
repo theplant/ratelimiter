@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/theplant/ratelimiter"
+	"github.com/theplant/ratelimiter/redisrl"
+	"github.com/theplant/ratelimiter/sqlrl"
 )
 
-func runExample(limiter *ratelimiter.RateLimiter, key string) {
+func runExample(limiter ratelimiter.RateLimiter, key string) {
 	// every 10 min , burst 5
 	durationPerToken := 10 * time.Minute
 	burst := 5
@@ -72,7 +74,7 @@ func runExample(limiter *ratelimiter.RateLimiter, key string) {
 
 
 func ExampleNewRedisRateLimiter() {
-	limiter, err := ratelimiter.NewRedisRateLimiter(context.Background(), redisCli)
+	limiter, err := redisrl.New(context.Background(), redisCli)
 	if err != nil {
 		panic(err)
 	}
@@ -129,7 +131,7 @@ func ExampleNewRedisRateLimiter() {
 
 func ExampleNewSQLRateLimiter() {
 	// Create SQL rate limiter with custom table name
-	limiter, err := ratelimiter.NewSQLRateLimiter(db, "rate_limits")
+	limiter, err := sqlrl.New(db, "rate_limits")
 	if err != nil {
 		panic(err)
 	}

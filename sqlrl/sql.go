@@ -1,4 +1,4 @@
-package ratelimiter
+package sqlrl
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pkg/errors"
+	"github.com/theplant/ratelimiter"
 	"gorm.io/gorm"
 )
 
@@ -22,10 +23,10 @@ var (
 	ColumnTimeToAct = "time_to_act"
 )
 
-// SQLRateLimiter implements the RateLimiter interface using GORM for SQL database storage.
+// RateLimiter implements the RateLimiter interface using GORM for SQL database storage.
 // It provides rate limiting functionality with standardized table structure,
 // and uses row-level locking (FOR UPDATE) to ensure consistency in concurrent scenarios.
-type SQLRateLimiter struct {
+type RateLimiter struct {
 	db          *gorm.DB
 	tableName   string
 	rawQuery    string
@@ -34,10 +35,10 @@ type SQLRateLimiter struct {
 }
 
 // Ensure SQLRateLimiter implements the RateLimiter interface
-var _ RateLimiter = &SQLRateLimiter{}
+var _ ratelimiter.RateLimiter = &RateLimiter{}
 
-// NewSQLRateLimiter creates a new SQLRateLimiter with the provided database and table name.
-func NewSQLRateLimiter(db *gorm.DB, tableName string) (*SQLRateLimiter, error) {
+// New creates a new SQLRateLimiter with the provided database and table name.
+func New(db *gorm.DB, tableName string) (*RateLimiter, error) {
 	if db == nil {
 		return nil, errors.New("DB is nil")
 	}
@@ -45,7 +46,7 @@ func NewSQLRateLimiter(db *gorm.DB, tableName string) (*SQLRateLimiter, error) {
 		return nil, errors.New("tableName is empty")
 	}
 
-	s := &SQLRateLimiter{
+	s := &RateLimiter{
 		db:        db,
 		tableName: tableName,
 	}
@@ -86,8 +87,8 @@ func NewSQLRateLimiter(db *gorm.DB, tableName string) (*SQLRateLimiter, error) {
 // Allow checks if the specified number of tokens are available immediately.
 // It returns true if the request can be satisfied without waiting, false otherwise.
 // This method is implemented as a Reserve operation with MaxFutureReserve set to 0.
-func (s *SQLRateLimiter) Allow(ctx context.Context, req *AllowRequest) (bool, error) {
-	return Allow(ctx, s, req)
+func (s *RateLimiter) Allow(ctx context.Context, req *ratelimiter.AllowRequest) (bool, error) {
+	return ratelimiter.Allow(ctx, s, req)
 }
 
 // Migrate creates the required table if it doesn't exist.
@@ -99,7 +100,7 @@ func (s *SQLRateLimiter) Allow(ctx context.Context, req *AllowRequest) (bool, er
 // - Uses BIGINT for time storage (unix microseconds)
 // - No foreign keys (logical relationships only)
 // - Optimized for rate limiting workloads
-func (s *SQLRateLimiter) Migrate(ctx context.Context) error {
+func (s *RateLimiter) Migrate(ctx context.Context) error {
 	// Build CREATE TABLE statement according to database design standards
 	createTableSQL := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s (
@@ -172,14 +173,14 @@ func isDuplicateKeyError(err error) bool {
 // Reserve attempts to reserve the specified number of tokens.
 // It returns a Reservation indicating whether the request was successful
 // and when the action should be performed.
-func (s *SQLRateLimiter) Reserve(ctx context.Context, req *ReserveRequest) (*Reservation, error) {
+func (s *RateLimiter) Reserve(ctx context.Context, req *ratelimiter.ReserveRequest) (*ratelimiter.Reservation, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 	return s.attempt(ctx, req, 0)
 }
 
-func (s *SQLRateLimiter) attempt(ctx context.Context, req *ReserveRequest, idx int) (*Reservation, error) {
+func (s *RateLimiter) attempt(ctx context.Context, req *ratelimiter.ReserveRequest, idx int) (*ratelimiter.Reservation, error) {
 	select {
 	case <-ctx.Done():
 		return nil, errors.Wrap(ctx.Err(), "context done")
@@ -187,8 +188,8 @@ func (s *SQLRateLimiter) attempt(ctx context.Context, req *ReserveRequest, idx i
 	}
 
 	var now time.Time
-	if isTestMode(ctx) {
-		nowFunc, exists := nowFuncFromContextForTest(ctx)
+	if ratelimiter.IsTestMode(ctx) {
+		nowFunc, exists := ratelimiter.NowFuncFromContextForTest(ctx)
 		if exists {
 			now = nowFunc().UTC() // stripMono
 		}
@@ -205,7 +206,7 @@ func (s *SQLRateLimiter) attempt(ctx context.Context, req *ReserveRequest, idx i
 			return errors.Wrap(err, "failed to get kv")
 		}
 
-		if isTestMode(ctx) {
+		if ratelimiter.IsTestMode(ctx) {
 			afterQuery, ok := ctx.Value(ctxKeyAfterQuery{}).(func(kv kvWrapper))
 			if ok {
 				afterQuery(kv)
@@ -251,7 +252,7 @@ func (s *SQLRateLimiter) attempt(ctx context.Context, req *ReserveRequest, idx i
 		return nil, err
 	}
 
-	return &Reservation{
+	return &ratelimiter.Reservation{
 		ReserveRequest: req,
 		OK:             ok,
 		TimeToAct:      timeToAct,

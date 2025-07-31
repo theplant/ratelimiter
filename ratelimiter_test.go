@@ -1,4 +1,4 @@
-package ratelimiter
+package ratelimiter_test
 
 import (
 	"context"
@@ -8,6 +8,9 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
+	"github.com/theplant/ratelimiter"
+	"github.com/theplant/ratelimiter/redisrl"
+	"github.com/theplant/ratelimiter/sqlrl"
 	"github.com/theplant/testenv"
 	"gorm.io/gorm"
 )
@@ -29,7 +32,7 @@ func TestMain(m *testing.M) {
 	redisCli = env.Redis
 
 	// Create SQL rate limiter and migrate table
-	sqlLimiter, err := NewSQLRateLimiter(db, "kvs")
+	sqlLimiter, err := sqlrl.New(db, "kvs")
 	if err != nil {
 		log.Fatalf("Failed to create SQL rate limiter: %v", err)
 	}
@@ -43,21 +46,21 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
+func testReserveWithNowAdvanced(t *testing.T, limiter ratelimiter.RateLimiter, key string) {
 	durationPerToken := time.Second
 	burst := 10
 
 	now := time.Now()
 	testCases := []struct {
 		name                string
-		reserveRequest      *ReserveRequest
+		reserveRequest      *ratelimiter.ReserveRequest
 		now                 time.Time
-		expectedReservation *Reservation
+		expectedReservation *ratelimiter.Reservation
 		expectedError       string
 	}{
 		{
 			name: "invalid parameters",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              "",
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -70,7 +73,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -78,7 +81,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 				MaxFutureReserve: 0,
 			},
 			now: now,
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true,
 				TimeToAct:  now.Add(-10 * durationPerToken).Add(5 * durationPerToken),
 				ReservedAt: now,
@@ -87,7 +90,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "insufficient tokens",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -95,7 +98,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 				MaxFutureReserve: 0,
 			},
 			now: now,
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         false,
 				TimeToAct:  now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 				ReservedAt: now,
@@ -104,7 +107,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens after waiting",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -112,7 +115,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 				MaxFutureReserve: 0,
 			},
 			now: now.Add(durationPerToken), // 6 tokens available after 1 second
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true,
 				TimeToAct:  now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken),
@@ -121,7 +124,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "MaxFutureReserve",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -129,7 +132,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 				MaxFutureReserve: 3 * durationPerToken, // 3 seconds in the future
 			},
 			now: now.Add(durationPerToken),
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true,
 				TimeToAct:  now.Add(durationPerToken).Add(3 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken),
@@ -138,7 +141,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "MaxFutureReserve but not enough tokens",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -146,7 +149,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 				MaxFutureReserve: 5 * durationPerToken, // should retry after 1 seconds with MaxFutureReserve 5 seconds
 			},
 			now: now.Add(durationPerToken),
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         false,
 				TimeToAct:  now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken),
@@ -155,7 +158,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "retry after 1 second",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -163,7 +166,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 				MaxFutureReserve: 5 * durationPerToken,
 			},
 			now: now.Add(durationPerToken).Add(durationPerToken), // retry after 1 second
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true, // should be OK now
 				TimeToAct:  now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken).Add(durationPerToken),
@@ -174,7 +177,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := WithNowFuncForTest(context.Background(), func() time.Time {
+			ctx := ratelimiter.WithNowFuncForTest(context.Background(), func() time.Time {
 				return tc.now
 			})
 			r, err := limiter.Reserve(ctx, tc.reserveRequest)
@@ -224,21 +227,21 @@ func testReserveWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 	}
 }
 
-func testAllowWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
+func testAllowWithNowAdvanced(t *testing.T, limiter ratelimiter.RateLimiter, key string) {
 	durationPerToken := time.Second
 	burst := 10
 
 	now := time.Now()
 	testCases := []struct {
 		name          string
-		allowRequest  *AllowRequest
+		allowRequest  *ratelimiter.AllowRequest
 		now           time.Time
 		expectedOK    bool
 		expectedError string
 	}{
 		{
 			name: "invalid parameters",
-			allowRequest: &AllowRequest{
+			allowRequest: &ratelimiter.AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            0,
@@ -250,7 +253,7 @@ func testAllowWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens",
-			allowRequest: &AllowRequest{
+			allowRequest: &ratelimiter.AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -262,7 +265,7 @@ func testAllowWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "insufficient tokens",
-			allowRequest: &AllowRequest{
+			allowRequest: &ratelimiter.AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -274,7 +277,7 @@ func testAllowWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens after waiting",
-			allowRequest: &AllowRequest{
+			allowRequest: &ratelimiter.AllowRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -288,7 +291,7 @@ func testAllowWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := WithNowFuncForTest(context.Background(), func() time.Time {
+			ctx := ratelimiter.WithNowFuncForTest(context.Background(), func() time.Time {
 				return tc.now
 			})
 			ok, err := limiter.Allow(ctx, tc.allowRequest)
@@ -303,30 +306,30 @@ func testAllowWithNowAdvanced(t *testing.T, limiter RateLimiter, key string) {
 }
 
 func TestReserveWithNowAdvanced_SQL(t *testing.T) {
-	limiter, err := NewSQLRateLimiter(db, "kvs")
+	limiter, err := sqlrl.New(db, "kvs")
 	require.NoError(t, err)
 	testReserveWithNowAdvanced(t, limiter, "TestReserveWithNowAdvanced_SQL")
 }
 
 func TestAllowWithNowAdvanced_SQL(t *testing.T) {
-	limiter, err := NewSQLRateLimiter(db, "kvs")
+	limiter, err := sqlrl.New(db, "kvs")
 	require.NoError(t, err)
 	testAllowWithNowAdvanced(t, limiter, "TestAllowWithNowAdvanced_SQL")
 }
 
 func TestReserveWithNowAdvanced_Redis(t *testing.T) {
-	limiter, err := NewRedisRateLimiter(context.Background(), redisCli)
+	limiter, err := redisrl.New(context.Background(), redisCli)
 	require.NoError(t, err)
 	testReserveWithNowAdvanced(t, limiter, "TestReserveWithNowAdvanced_Redis")
 }
 
 func TestAllowWithNowAdvanced_Redis(t *testing.T) {
-	limiter, err := NewRedisRateLimiter(context.Background(), redisCli)
+	limiter, err := redisrl.New(context.Background(), redisCli)
 	require.NoError(t, err)
 	testAllowWithNowAdvanced(t, limiter, "TestAllowWithNowAdvanced_Redis")
 }
 
-func testReserve(t *testing.T, limiter RateLimiter, key string) {
+func testReserve(t *testing.T, limiter ratelimiter.RateLimiter, key string) {
 	durationPerToken := 100 * time.Millisecond
 	burst := 10
 
@@ -334,13 +337,13 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 	testCases := []struct {
 		name                string
 		before              func()
-		reserveRequest      *ReserveRequest
-		expectedReservation *Reservation
+		reserveRequest      *ratelimiter.ReserveRequest
+		expectedReservation *ratelimiter.Reservation
 		expectedError       string
 	}{
 		{
 			name: "invalid parameters",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              "",
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
@@ -352,14 +355,14 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "enough tokens",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
 				Tokens:           5,
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true,
 				TimeToAct:  now.Add(-10 * durationPerToken).Add(5 * durationPerToken),
 				ReservedAt: now,
@@ -368,14 +371,14 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "insufficient tokens",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
 				Tokens:           6, // 6 tokens requested, but only 5 available
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         false,
 				TimeToAct:  now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 				ReservedAt: now,
@@ -387,14 +390,14 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 			before: func() {
 				time.Sleep(durationPerToken)
 			},
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
 				Tokens:           6,
 				MaxFutureReserve: 0,
 			},
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true,
 				TimeToAct:  now.Add(-10 * durationPerToken).Add(5 * durationPerToken).Add(6 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken),
@@ -403,14 +406,14 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "MaxFutureReserve",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
 				Tokens:           3,
 				MaxFutureReserve: 3 * durationPerToken, // 3 seconds in the future
 			},
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true,
 				TimeToAct:  now.Add(durationPerToken).Add(3 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken),
@@ -419,14 +422,14 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 		},
 		{
 			name: "MaxFutureReserve but not enough tokens",
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
 				Tokens:           3,
 				MaxFutureReserve: 5 * durationPerToken, // should retry after 1 seconds with MaxFutureReserve 5 seconds
 			},
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         false,
 				TimeToAct:  now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken),
@@ -438,14 +441,14 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 			before: func() {
 				time.Sleep(durationPerToken)
 			},
-			reserveRequest: &ReserveRequest{
+			reserveRequest: &ratelimiter.ReserveRequest{
 				Key:              key,
 				DurationPerToken: durationPerToken,
 				Burst:            burst,
 				Tokens:           3,
 				MaxFutureReserve: 5 * durationPerToken,
 			},
-			expectedReservation: &Reservation{
+			expectedReservation: &ratelimiter.Reservation{
 				OK:         true, // should be OK now
 				TimeToAct:  now.Add(durationPerToken).Add(3 * durationPerToken).Add(3 * durationPerToken),
 				ReservedAt: now.Add(durationPerToken).Add(durationPerToken),
@@ -506,13 +509,13 @@ func testReserve(t *testing.T, limiter RateLimiter, key string) {
 }
 
 func TestReserve_SQL(t *testing.T) {
-	limiter, err := NewSQLRateLimiter(db, "kvs")
+	limiter, err := sqlrl.New(db, "kvs")
 	require.NoError(t, err)
 	testReserve(t, limiter, "TestReserve_SQL")
 }
 
 func TestReserve_Redis(t *testing.T) {
-	limiter, err := NewRedisRateLimiter(context.Background(), redisCli)
+	limiter, err := redisrl.New(context.Background(), redisCli)
 	require.NoError(t, err)
 	testReserve(t, limiter, "TestReserve_Redis")
 }
