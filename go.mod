@@ -2,8 +2,6 @@ module github.com/theplant/ratelimiter
 
 go 1.23.0
 
-toolchain go1.24.1
-
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-sql-driver/mysql v1.8.1

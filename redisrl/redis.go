@@ -43,13 +43,6 @@ func New(ctx context.Context, client *redis.Client) (*RateLimiter, error) {
 	}, nil
 }
 
-// Allow checks if the specified number of tokens are available immediately.
-// It returns true if the request can be satisfied without waiting, false otherwise.
-// This method is implemented as a Reserve operation with MaxFutureReserve set to 0.
-func (r *RateLimiter) Allow(ctx context.Context, req *ratelimiter.AllowRequest) (bool, error) {
-	return ratelimiter.Allow(ctx, r, req)
-}
-
 // Reserve attempts to reserve the specified number of tokens.
 // It returns a Reservation indicating whether the request was successful
 // and when the action should be performed.

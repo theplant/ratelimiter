@@ -15,15 +15,10 @@ type RateLimiter interface {
 	// If successful (OK=true), the caller should wait until TimeToAct before proceeding.
 	// If unsuccessful (OK=false), the caller should wait until RetryAfter before trying again.
 	Reserve(ctx context.Context, req *ReserveRequest) (*Reservation, error)
-
-	// Allow checks if the specified number of tokens are available immediately.
-	// It returns true if the request can be satisfied without waiting, false otherwise.
-	Allow(ctx context.Context, req *AllowRequest) (bool, error)
 }
 
 // ReserveRequest represents a request to reserve tokens, potentially in the future.
-// This is the core request type - AllowRequest is implemented as a Reserve operation
-// with MaxFutureReserve set to 0.
+// Set MaxFutureReserve to 0 for immediate allow/deny decisions.
 type ReserveRequest struct {
 	// Key is the unique identifier for the rate limiter bucket
 	Key string
@@ -152,35 +147,4 @@ func (r *Reservation) MustRetryAfterFrom(t time.Time) time.Duration {
 		panic(err)
 	}
 	return retryAfter
-}
-
-// AllowRequest represents a request to check if tokens are available immediately.
-// It contains all the parameters needed to perform a rate limiting check.
-type AllowRequest struct {
-	// Key is the unique identifier for the rate limiter bucket
-	Key string
-	// DurationPerToken defines how long each token takes to regenerate
-	DurationPerToken time.Duration
-	// Burst is the maximum number of tokens that can be consumed at once
-	Burst int
-	// Tokens is the number of tokens requested
-	Tokens int
-}
-
-// Allow is a common implementation for the Allow method that can be used by all RateLimiter implementations.
-// It converts an AllowRequest to a ReserveRequest with MaxFutureReserve set to 0.
-func Allow(ctx context.Context, limiter RateLimiter, req *AllowRequest) (bool, error) {
-	reserveReq := &ReserveRequest{
-		Key:              req.Key,
-		DurationPerToken: req.DurationPerToken,
-		Burst:            req.Burst,
-		Tokens:           req.Tokens,
-		MaxFutureReserve: 0,
-	}
-
-	reservation, err := limiter.Reserve(ctx, reserveReq)
-	if err != nil {
-		return false, err
-	}
-	return reservation.OK, nil
 }

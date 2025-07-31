@@ -231,106 +231,16 @@ func testReserveWithNowAdvanced(t *testing.T, limiter ratelimiter.RateLimiter, k
 	}
 }
 
-func testAllowWithNowAdvanced(t *testing.T, limiter ratelimiter.RateLimiter, key string) {
-	durationPerToken := time.Second
-	burst := 10
-
-	now := time.Now()
-	testCases := []struct {
-		name          string
-		allowRequest  *ratelimiter.AllowRequest
-		now           time.Time
-		expectedOK    bool
-		expectedError string
-	}{
-		{
-			name: "invalid parameters",
-			allowRequest: &ratelimiter.AllowRequest{
-				Key:              key,
-				DurationPerToken: durationPerToken,
-				Burst:            0,
-				Tokens:           5,
-			},
-			now:           now,
-			expectedOK:    false,
-			expectedError: "burst is non-positive",
-		},
-		{
-			name: "enough tokens",
-			allowRequest: &ratelimiter.AllowRequest{
-				Key:              key,
-				DurationPerToken: durationPerToken,
-				Burst:            burst,
-				Tokens:           5,
-			},
-			now:           now,
-			expectedOK:    true,
-			expectedError: "",
-		},
-		{
-			name: "insufficient tokens",
-			allowRequest: &ratelimiter.AllowRequest{
-				Key:              key,
-				DurationPerToken: durationPerToken,
-				Burst:            burst,
-				Tokens:           6, // 6 tokens requested, but only 5 available
-			},
-			now:           now,
-			expectedOK:    false,
-			expectedError: "",
-		},
-		{
-			name: "enough tokens after waiting",
-			allowRequest: &ratelimiter.AllowRequest{
-				Key:              key,
-				DurationPerToken: durationPerToken,
-				Burst:            burst,
-				Tokens:           6,
-			},
-			now:           now.Add(durationPerToken), // 6 tokens available after 1 second
-			expectedOK:    true,
-			expectedError: "",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := ratelimiter.WithNowFuncForTest(context.Background(), func() time.Time {
-				return tc.now
-			})
-			ok, err := limiter.Allow(ctx, tc.allowRequest)
-			if tc.expectedError != "" {
-				require.ErrorContains(t, err, tc.expectedError)
-			} else {
-				require.NoError(t, err)
-			}
-			require.Equal(t, tc.expectedOK, ok)
-		})
-	}
-}
-
 func TestReserveWithNowAdvanced_SQL(t *testing.T) {
 	limiter, err := sqlrl.New(db, "kvs")
 	require.NoError(t, err)
 	testReserveWithNowAdvanced(t, limiter, "TestReserveWithNowAdvanced_SQL")
 }
 
-func TestAllowWithNowAdvanced_SQL(t *testing.T) {
-	limiter, err := sqlrl.New(db, "kvs")
-	require.NoError(t, err)
-	testAllowWithNowAdvanced(t, limiter, "TestAllowWithNowAdvanced_SQL")
-}
-
 func TestReserveWithNowAdvanced_Redis(t *testing.T) {
 	limiter, err := redisrl.New(context.Background(), redisCli)
 	require.NoError(t, err)
 	testReserveWithNowAdvanced(t, limiter, "TestReserveWithNowAdvanced_Redis")
-}
-
-func TestAllowWithNowAdvanced_Redis(t *testing.T) {
-	limiter, err := redisrl.New(context.Background(), redisCli)
-	require.NoError(t, err)
-	testAllowWithNowAdvanced(t, limiter, "TestAllowWithNowAdvanced_Redis")
 }
 
 func testReserve(t *testing.T, limiter ratelimiter.RateLimiter, key string) {

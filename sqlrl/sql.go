@@ -82,13 +82,6 @@ func New(db *gorm.DB, tableName string) (*RateLimiter, error) {
 	return s, nil
 }
 
-// Allow checks if the specified number of tokens are available immediately.
-// It returns true if the request can be satisfied without waiting, false otherwise.
-// This method is implemented as a Reserve operation with MaxFutureReserve set to 0.
-func (s *RateLimiter) Allow(ctx context.Context, req *ratelimiter.AllowRequest) (bool, error) {
-	return ratelimiter.Allow(ctx, s, req)
-}
-
 // Migrate creates the required table if it doesn't exist.
 // This method follows the database design standards and handles concurrent migration attempts.
 // It's safe to call this method multiple times - it will only create the table if it doesn't exist.
