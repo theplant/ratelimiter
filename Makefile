@@ -1,10 +1,11 @@
-.PHONY: test coverage clean
+.PHONY: tidy test coverage
 
-# Run all tests
-test:
+tidy:
+	@go mod tidy
+
+test: tidy
 	go test ./...
 
-# Get test coverage percentage for the entire project
-coverage:
-	@echo "Getting test coverage for entire project..."
+coverage: tidy
 	@go test -cover -coverpkg=./... ./... 2>/dev/null | grep "coverage:" | head -1 | awk '{print "Total Coverage: " $$5}'
+
