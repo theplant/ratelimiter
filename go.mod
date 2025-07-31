@@ -3,12 +3,12 @@ module github.com/theplant/ratelimiter
 go 1.23.0
 
 require (
-	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/jackc/pgx/v5 v5.5.4
 	github.com/pkg/errors v0.9.1
+	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stretchr/testify v1.9.0
-	github.com/theplant/testenv v0.1.0
+	github.com/theplant/testenv v0.1.1-0.20250731101823-8c1b28d2e127
 	golang.org/x/sync v0.12.0
 	gorm.io/gorm v1.25.11
 )
@@ -31,7 +31,6 @@ require (
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect

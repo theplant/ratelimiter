@@ -5,8 +5,8 @@ import (
 	_ "embed"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
+	redis "github.com/redis/go-redis/v9"
 	"github.com/theplant/ratelimiter"
 )
 
