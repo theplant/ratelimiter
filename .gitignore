@@ -2,3 +2,4 @@ gorm
 __debug_*
 
 .cursor
+coverage*

@@ -357,3 +357,22 @@ func TestNewSQLRateLimiterValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestSQLRateLimiter_EdgeCases(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("migrate with context cancellation", func(t *testing.T) {
+		limiter, err := New(db, "migrate_test_cancel")
+		require.NoError(t, err)
+
+		cancelCtx, cancel := context.WithCancel(ctx)
+		cancel() // Cancel immediately
+
+		err = limiter.Migrate(cancelCtx)
+		// Depending on timing, this might succeed or fail
+		// The important thing is that it doesn't panic
+		if err != nil {
+			require.Contains(t, err.Error(), "context")
+		}
+	})
+}
