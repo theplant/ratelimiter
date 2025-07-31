@@ -1,12 +1,16 @@
-package ratelimiter
+package ratelimiter_test
 
 import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/theplant/ratelimiter"
+	"github.com/theplant/ratelimiter/redisrl"
+	"github.com/theplant/ratelimiter/sqlrl"
 )
 
-func runBenchmarks(b *testing.B, limiter *RateLimiter) {
+func runBenchmarks(b *testing.B, limiter ratelimiter.RateLimiter) {
 	ctx := context.Background()
 
 	tests := []struct {
@@ -25,14 +29,14 @@ func runBenchmarks(b *testing.B, limiter *RateLimiter) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				reserveReq := &ReserveRequest{
+				reserveReq := &ratelimiter.ReserveRequest{
 					Key:              tt.key,
 					DurationPerToken: tt.durationPerToken,
 					Burst:            tt.burst,
 					Tokens:           1,
 					MaxFutureReserve: 0,
 				}
-				ctx := WithNowFuncForTest(ctx, func() time.Time {
+				ctx := ratelimiter.WithNowFuncForTest(ctx, func() time.Time {
 					return now.Add(time.Duration(i) * tt.durationPerToken)
 				})
 				_, err := limiter.Reserve(ctx, reserveReq)
@@ -44,16 +48,18 @@ func runBenchmarks(b *testing.B, limiter *RateLimiter) {
 	}
 }
 
-func BenchmarkDriverRedis_Reserve(b *testing.B) {
-	driver, err := InitRedisDriver(context.Background(), redisCli)
+func BenchmarkRedisRateLimiter_Reserve(b *testing.B) {
+	limiter, err := redisrl.New(context.Background(), redisCli)
 	if err != nil {
-		b.Fatalf("failed to initialize Redis driver: %v", err)
+		b.Fatalf("failed to initialize Redis rate limiter: %v", err)
 	}
-	limiter := New(driver)
 	runBenchmarks(b, limiter)
 }
 
-func BenchmarkDriverGORM_Reserve(b *testing.B) {
-	limiter := New(NewGormDriver(db))
+func BenchmarkSQLRateLimiter_Reserve(b *testing.B) {
+	limiter, err := sqlrl.New(db, "kvs")
+	if err != nil {
+		b.Fatal(err)
+	}
 	runBenchmarks(b, limiter)
 }

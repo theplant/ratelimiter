@@ -5,7 +5,7 @@ local tokens = tonumber(ARGV[3]) -- Number of tokens requested
 local now = tonumber(ARGV[4]) -- Current timestamp, in microseconds
 local maxFutureReserve = tonumber(ARGV[5]) -- Maximum reservation duration, in microseconds
 
-if durationPerToken <= 0 or burst <= 0 or tokens <= 0 or tokens > burst then
+if durationPerToken <= 0 or burst <= 0 or tokens <= 0 or tokens > burst or maxFutureReserve < 0 then
 	return {-2, 0, 0} -- Indicates invalid parameters
 end
 
