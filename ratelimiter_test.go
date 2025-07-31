@@ -54,7 +54,7 @@ func testReserveWithNowAdvanced(t *testing.T, limiter ratelimiter.RateLimiter, k
 	durationPerToken := time.Second
 	burst := 10
 
-	now := time.Now()
+	now := time.UnixMicro(time.Now().UnixMicro())
 	testCases := []struct {
 		name                string
 		reserveRequest      *ratelimiter.ReserveRequest

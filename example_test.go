@@ -14,7 +14,7 @@ func runExample(limiter ratelimiter.RateLimiter, key string) {
 	// every 10 min , burst 5
 	durationPerToken := 10 * time.Minute
 	burst := 5
-	now := time.Now()
+	now := time.UnixMicro(time.Now().UnixMicro())
 
 	ctx := context.Background()
 
