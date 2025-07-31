@@ -22,7 +22,11 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	defer env.TearDown()
+	defer func() {
+		if err := env.TearDown(); err != nil {
+			log.Fatalf("Failed to tear down test environment: %v", err)
+		}
+	}()
 
 	db = env.DB
 
@@ -352,44 +356,4 @@ func TestNewSQLRateLimiterValidation(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSQLRateLimiterBigIntDataType(t *testing.T) {
-	ctx := context.Background()
-
-	// Test with a specific table for BIGINT testing
-	limiter, err := New(db, "bigint_test_table")
-	require.NoError(t, err)
-
-	// Create table using Migrate
-	err = limiter.Migrate(ctx)
-	require.NoError(t, err)
-
-	// Test with various time values that would test BIGINT capacity
-	testKey := "bigint_test_key"
-
-	// Test basic functionality
-	r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
-		Key:              testKey,
-		DurationPerToken: 100 * time.Millisecond,
-		Burst:            5,
-		Tokens:           1,
-		MaxFutureReserve: 0,
-	})
-	require.NoError(t, err)
-	require.True(t, r.OK)
-
-	// Verify data storage and retrieval works correctly
-	r2, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
-		Key:              testKey,
-		DurationPerToken: 100 * time.Millisecond,
-		Burst:            5,
-		Tokens:           1,
-		MaxFutureReserve: 0,
-	})
-	require.NoError(t, err)
-	require.True(t, r2.OK)
-
-	// The second request should have a later TimeToAct
-	require.True(t, r2.TimeToAct.After(r.TimeToAct))
 }

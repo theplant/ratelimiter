@@ -59,10 +59,8 @@ func New(db *gorm.DB, tableName string) (*RateLimiter, error) {
 		currentTimestampQuery = "SYSDATE(6)" // MySQL: real-time timestamp with microsecond precision
 	case "postgres":
 		currentTimestampQuery = "clock_timestamp()" // PostgreSQL: real-time timestamp for maximum accuracy
-	case "sqlite":
-		currentTimestampQuery = "datetime('now', 'subsec')" // SQLite: statement-level real-time timestamp
 	default:
-		currentTimestampQuery = "CURRENT_TIMESTAMP"
+		return nil, errors.Errorf("unsupported dialect %q, must be mysql or postgres", db.Dialector.Name())
 	}
 
 	s.rawQuery = fmt.Sprintf(`

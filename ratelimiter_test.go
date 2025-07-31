@@ -26,7 +26,11 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	defer env.TearDown()
+	defer func() {
+		if err := env.TearDown(); err != nil {
+			log.Fatalf("Failed to tear down test environment: %v", err)
+		}
+	}()
 
 	db = env.DB
 	redisCli = env.Redis
