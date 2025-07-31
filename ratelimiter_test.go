@@ -198,8 +198,8 @@ func testReserveWithNowAdvanced(t *testing.T, limiter ratelimiter.RateLimiter, k
 
 				require.Equal(t, tc.reserveRequest, r.ReserveRequest)
 				require.Equal(t, tc.expectedReservation.OK, r.OK)
-				require.Equal(t, tc.expectedReservation.TimeToAct.UTC(), r.TimeToAct.UTC())
-				require.Equal(t, tc.expectedReservation.ReservedAt.UTC(), r.ReservedAt.UTC())
+				require.Equal(t, tc.expectedReservation.TimeToAct.Truncate(time.Microsecond).UTC(), r.TimeToAct.Truncate(time.Microsecond).UTC())
+				require.Equal(t, tc.expectedReservation.ReservedAt.Truncate(time.Microsecond).UTC(), r.ReservedAt.Truncate(time.Microsecond).UTC())
 
 				if r.OK {
 					_, err := r.RetryAfter()

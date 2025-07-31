@@ -88,6 +88,7 @@ if r.OK {
 - ⚠️ **IMPORTANT**: Only call `MustDelayFrom()` when `OK = true`
 - ⚠️ **IMPORTANT**: Only call `MustRetryAfterFrom()` when `OK = false`
 - Calling these methods with wrong `OK` status may panic
+- ⚠️ **TIME PRECISION**: All time calculations are performed with **microsecond precision**.
 
 ### Benchmark
 
