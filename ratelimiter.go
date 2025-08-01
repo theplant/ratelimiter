@@ -96,11 +96,13 @@ func (r *Reservation) RetryAfterFrom(t time.Time) (time.Duration, error) {
 		return 0, errors.New("cannot get retry after from OK reservation")
 	}
 
-	delay := r.TimeToAct.Sub(t) - r.MaxFutureReserve
-	if delay < 0 {
+	// We subtract MaxFutureReserve to calculate the minimum wait time before retrying
+	// with the same ReserveRequest can succeed.
+	retryAfter := r.TimeToAct.Sub(t) - r.MaxFutureReserve
+	if retryAfter < 0 {
 		return 0, nil
 	}
-	return delay, nil
+	return retryAfter, nil
 }
 
 // RetryAfter returns the duration to wait before retrying from now.
