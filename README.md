@@ -1,5 +1,7 @@
 # ratelimiter
 
+A distributed rate limiter library for Go applications.
+
 Currently supports Redis and SQL (GORM) storage backends.
 
 ## Usage Examples
