@@ -29,7 +29,7 @@ var (
 type RateLimiter struct {
 	db          *gorm.DB
 	tableName   string
-	rawQuery    string
+	selectQuery string
 	insertQuery string
 	updateQuery string
 }
@@ -63,7 +63,7 @@ func New(db *gorm.DB, tableName string) (*RateLimiter, error) {
 		return nil, errors.Errorf("unsupported dialect %q, must be mysql or postgres", db.Dialector.Name())
 	}
 
-	s.rawQuery = fmt.Sprintf(`
+	s.selectQuery = fmt.Sprintf(`
 	WITH kv_select AS (
 		SELECT %s, %s FROM %s WHERE %s = ? FOR UPDATE
 	)
@@ -193,7 +193,7 @@ func (s *RateLimiter) attempt(ctx context.Context, req *ratelimiter.ReserveReque
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var kv kvWrapper
 
-		if err := tx.Raw(s.rawQuery, req.Key, req.Key).Scan(&kv).Error; err != nil {
+		if err := tx.Raw(s.selectQuery, req.Key, req.Key).Scan(&kv).Error; err != nil {
 			return errors.Wrap(err, "failed to get kv")
 		}
 
