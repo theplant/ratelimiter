@@ -58,26 +58,37 @@ if r.OK {
 **Future Reservation (MaxFutureReserve > 0):**
 
 ```go
-r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
-    Key:              "user:123",
-    DurationPerToken: 10 * time.Minute,
-    Burst:            5,
-    Tokens:           1,
-    MaxFutureReserve: 30 * time.Second, // Allow up to 30s wait
-})
-
-if r.OK {
-    delay := r.MustDelayFrom(time.Now())
-    if delay > 0 {
-        fmt.Printf("Request allowed, wait %v before acting\n", delay)
-        time.Sleep(delay) // Wait before proceeding
-    } else {
-        fmt.Println("Request allowed, act immediately")
+func handleRequest(ctx context.Context, limiter ratelimiter.RateLimiter) error {
+    r, err := limiter.Reserve(ctx, &ratelimiter.ReserveRequest{
+        Key:              "user:123",
+        DurationPerToken: 10 * time.Minute,
+        Burst:            5,
+        Tokens:           1,
+        MaxFutureReserve: 30 * time.Second, // Allow up to 30s wait
+    })
+    if err != nil {
+        return err
     }
-    // Now perform the action
-} else {
-    retryAfter := r.MustRetryAfterFrom(time.Now())
-    fmt.Printf("Request denied, retry after %v\n", retryAfter)
+
+    if r.OK {
+        delay := r.MustDelayFrom(time.Now())
+        if delay > 0 {
+            fmt.Printf("Request allowed, wait %v before acting\n", delay)
+            select {
+            case <-time.After(delay):
+                fmt.Println("Wait completed, proceeding with action")
+            case <-ctx.Done():
+                return ctx.Err()
+            }
+        } else {
+            fmt.Println("No wait needed, proceeding with action immediately")
+        }
+        // Now perform the action
+    } else {
+        retryAfter := r.MustRetryAfterFrom(time.Now())
+        fmt.Printf("Request denied, retry after %v\n", retryAfter)
+    }
+    return nil
 }
 ```
 
