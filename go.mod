@@ -1,6 +1,6 @@
 module github.com/theplant/ratelimiter
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/go-sql-driver/mysql v1.8.1
@@ -9,7 +9,7 @@ require (
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/stretchr/testify v1.10.0
 	github.com/theplant/testenv v0.2.1
-	golang.org/x/sync v0.16.0
+	golang.org/x/sync v0.18.0
 	gorm.io/gorm v1.30.1
 )
 
@@ -72,9 +72,9 @@ require (
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/postgres v1.6.0 // indirect
