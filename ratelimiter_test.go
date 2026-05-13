@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	redisCli = redis.NewClient(&redis.Options{
 		Addr: strings.TrimPrefix(endpoint, "redis://"),
 	})
-	defer redisCli.Close()
+	defer func() { _ = redisCli.Close() }()
 
 	// Create SQL rate limiter and migrate table
 	sqlLimiter, err := sqlrl.New(db, "kvs")

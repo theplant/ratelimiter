@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	redisClient = redis.NewClient(&redis.Options{
 		Addr: strings.TrimPrefix(endpoint, "redis://"),
 	})
-	defer redisClient.Close()
+	defer func() { _ = redisClient.Close() }()
 
 	m.Run()
 }
