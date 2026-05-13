@@ -13,7 +13,6 @@ import (
 	"github.com/theplant/ratelimiter"
 	"github.com/theplant/ratelimiter/redisrl"
 	"github.com/theplant/ratelimiter/sqlrl"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -25,16 +24,9 @@ var (
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, err := gormx.OpenContainer(ctx, nil)
-	if err != nil {
-		panic(err)
-	}
-	defer func() { _ = pgContainer.Terminate(ctx) }()
-
-	db, err = gorm.Open(postgres.Open(pgContainer.DSN), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
+	suite := gormx.MustStartRawTestSuite(ctx)
+	defer func() { _ = suite.Stop(ctx) }()
+	db = suite.DB()
 
 	redisContainer, err := redisx.OpenContainer(ctx, nil)
 	if err != nil {

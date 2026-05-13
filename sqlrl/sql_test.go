@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/theplant/ratelimiter"
 	"golang.org/x/sync/errgroup"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -19,16 +18,9 @@ var db *gorm.DB
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	pgContainer, err := gormx.OpenContainer(ctx, nil)
-	if err != nil {
-		panic(err)
-	}
-	defer func() { _ = pgContainer.Terminate(ctx) }()
-
-	db, err = gorm.Open(postgres.Open(pgContainer.DSN), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("Failed to open gorm: %v", err)
-	}
+	suite := gormx.MustStartRawTestSuite(ctx)
+	defer func() { _ = suite.Stop(ctx) }()
+	db = suite.DB()
 
 	// Create SQL rate limiter and migrate table
 	sqlLimiter, err := New(db, "kvs")
