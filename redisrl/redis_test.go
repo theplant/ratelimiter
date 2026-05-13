@@ -7,24 +7,25 @@ import (
 
 	redis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"github.com/theplant/ratelimiter/internal/testsupport"
 	"github.com/theplant/ratelimiter/redisrl"
-	"github.com/theplant/testenv"
 )
 
 var redisClient *redis.Client
 
 func TestMain(m *testing.M) {
-	env, err := testenv.New().RedisEnable(true).SetUp()
+	ctx := context.Background()
+	redisContainer, err := testsupport.OpenRedisContainer(ctx)
 	if err != nil {
 		panic(err)
 	}
 	defer func() {
-		if err := env.TearDown(); err != nil {
-			log.Fatalf("Failed to tear down test environment: %v", err)
+		if err := redisContainer.Close(ctx); err != nil {
+			log.Printf("Failed to close redis container: %v", err)
 		}
 	}()
 
-	redisClient = env.Redis
+	redisClient = redisContainer.Client
 	m.Run()
 }
 

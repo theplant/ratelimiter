@@ -7,28 +7,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qor5/x/v3/gormx"
 	"github.com/stretchr/testify/require"
 	"github.com/theplant/ratelimiter"
-	"github.com/theplant/testenv"
 	"golang.org/x/sync/errgroup"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 var db *gorm.DB
 
 func TestMain(m *testing.M) {
-	var err error
-	env, err := testenv.New().DBEnable(true).SetUp()
+	ctx := context.Background()
+	pgContainer, err := gormx.OpenContainer(ctx, nil)
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		if err := env.TearDown(); err != nil {
-			log.Fatalf("Failed to tear down test environment: %v", err)
-		}
-	}()
+	defer func() { _ = pgContainer.Terminate(ctx) }()
 
-	db = env.DB
+	db, err = gorm.Open(postgres.Open(pgContainer.DSN), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to open gorm: %v", err)
+	}
 
 	// Create SQL rate limiter and migrate table
 	sqlLimiter, err := New(db, "kvs")
@@ -37,7 +37,6 @@ func TestMain(m *testing.M) {
 	}
 
 	// Use Migrate method to create the table
-	ctx := context.Background()
 	if err := sqlLimiter.Migrate(ctx); err != nil {
 		log.Fatalf("Failed to migrate table: %v", err)
 	}
