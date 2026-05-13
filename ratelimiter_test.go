@@ -15,6 +15,7 @@ import (
 	"github.com/theplant/ratelimiter"
 	"github.com/theplant/ratelimiter/redisrl"
 	"github.com/theplant/ratelimiter/sqlrl"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -48,7 +49,11 @@ func TestMain(m *testing.M) {
 		panic(fmt.Errorf("failed to get redis connection string: %w", err))
 	}
 
-	db = testSuite.DB()
+	// Use a plain gorm connection without tracing to avoid polluting Example test output
+	db, err = gorm.Open(postgres.Open(testSuite.DSN()), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to open plain DB: %v", err)
+	}
 	redisCli = redis.NewClient(&redis.Options{
 		Addr: strings.TrimPrefix(endpoint, "redis://"),
 	})
