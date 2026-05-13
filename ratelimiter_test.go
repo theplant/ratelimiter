@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/qor5/x/v3/gormx"
+	"github.com/qor5/x/v3/redisx"
 	redis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/theplant/ratelimiter"
-	"github.com/theplant/ratelimiter/internal/testsupport"
 	"github.com/theplant/ratelimiter/redisrl"
 	"github.com/theplant/ratelimiter/sqlrl"
 	"gorm.io/driver/postgres"
@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	redisContainer, err := testsupport.OpenRedisContainer(ctx)
+	redisContainer, err := redisx.OpenContainer(ctx, nil)
 	if err != nil {
 		panic(err)
 	}
