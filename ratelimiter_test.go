@@ -2,14 +2,16 @@ package ratelimiter_test
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strings"
 	"testing"
 	"time"
 
-	redis "github.com/redis/go-redis/v9"
 	"github.com/qor5/x/v3/gormx"
-	"github.com/qor5/x/v3/redisx"
+	redis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	testredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/theplant/ratelimiter"
 	"github.com/theplant/ratelimiter/redisrl"
 	"github.com/theplant/ratelimiter/sqlrl"
@@ -31,15 +33,25 @@ func TestMain(m *testing.M) {
 		}
 	}()
 
-	redisTestSuite := redisx.MustStartTestSuite(ctx)
+	redisContainer, err := testredis.Run(ctx, "redis:7-alpine")
+	if err != nil {
+		panic(fmt.Errorf("failed to start redis container: %w", err))
+	}
 	defer func() {
-		if err := redisTestSuite.Stop(context.Background()); err != nil {
-			log.Fatalf("Failed to stop redis test suite: %v", err)
+		if err := redisContainer.Terminate(context.Background()); err != nil {
+			log.Fatalf("Failed to terminate redis container: %v", err)
 		}
 	}()
 
+	endpoint, err := redisContainer.ConnectionString(ctx)
+	if err != nil {
+		panic(fmt.Errorf("failed to get redis connection string: %w", err))
+	}
+
 	db = testSuite.DB()
-	redisCli = redisTestSuite.Client()
+	redisCli = redis.NewClient(&redis.Options{
+		Addr: strings.TrimPrefix(endpoint, "redis://"),
+	})
 	defer redisCli.Close()
 
 	// Create SQL rate limiter and migrate table

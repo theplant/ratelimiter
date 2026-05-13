@@ -6,9 +6,10 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/pkg/errors v0.9.1
-	github.com/qor5/x/v3 v3.2.1-0.20260513133758-978d9874a6f5
+	github.com/qor5/x/v3 v3.2.1-0.20260513135849-94dc4ed5d321
 	github.com/redis/go-redis/v9 v9.16.0
 	github.com/stretchr/testify v1.11.1
+	github.com/testcontainers/testcontainers-go/modules/redis v0.42.0
 	golang.org/x/sync v0.20.0
 	gorm.io/gorm v1.31.1
 )
@@ -106,7 +107,6 @@ require (
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/testcontainers/testcontainers-go v0.42.0 // indirect
-	github.com/testcontainers/testcontainers-go/modules/redis v0.42.0 // indirect
 	github.com/theplant/appkit v0.0.0-20250528023215-3d0d299dc4c6 // indirect
 	github.com/theplant/cachex v0.0.0-20251210183652-8e675368cbc5 // indirect
 	github.com/theplant/inject v1.2.2 // indirect
