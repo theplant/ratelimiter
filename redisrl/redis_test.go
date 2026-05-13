@@ -2,13 +2,11 @@ package redisrl_test
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"testing"
 
+	"github.com/qor5/x/v3/redisx"
 	redis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	testredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/theplant/ratelimiter/redisrl"
 )
 
@@ -16,24 +14,14 @@ var redisClient *redis.Client
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	container, err := testredis.Run(ctx, "redis:7-alpine")
-	if err != nil {
-		panic(fmt.Errorf("failed to start redis container: %w", err))
-	}
+	suite := redisx.MustStartTestSuite(ctx)
 	defer func() {
-		if err := container.Terminate(context.Background()); err != nil {
-			panic(fmt.Errorf("failed to terminate redis container: %w", err))
+		if err := suite.Stop(context.Background()); err != nil {
+			panic(err)
 		}
 	}()
 
-	endpoint, err := container.ConnectionString(ctx)
-	if err != nil {
-		panic(fmt.Errorf("failed to get redis connection string: %w", err))
-	}
-
-	redisClient = redis.NewClient(&redis.Options{
-		Addr: strings.TrimPrefix(endpoint, "redis://"),
-	})
+	redisClient = suite.Client()
 	defer redisClient.Close()
 
 	m.Run()
