@@ -6,7 +6,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/pkg/errors v0.9.1
-	github.com/qor5/x/v3 v3.2.1-0.20260513135849-94dc4ed5d321
+	github.com/qor5/x/v3 v3.2.1-0.20260515090943-65b6f4f15c42
 	github.com/redis/go-redis/v9 v9.16.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go/modules/redis v0.42.0
