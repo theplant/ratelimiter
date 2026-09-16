@@ -2,16 +2,20 @@ package ratelimiter_test
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/qor5/x/v3/gormx"
 	redis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	testredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/theplant/ratelimiter"
 	"github.com/theplant/ratelimiter/redisrl"
 	"github.com/theplant/ratelimiter/sqlrl"
-	"github.com/theplant/testenv"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -21,19 +25,39 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	var err error
-	env, err := testenv.New().DBEnable(true).RedisEnable(true).SetUp()
-	if err != nil {
-		panic(err)
-	}
+	ctx := context.Background()
+
+	testSuite := gormx.MustStartTestSuite(ctx)
 	defer func() {
-		if err := env.TearDown(); err != nil {
-			log.Fatalf("Failed to tear down test environment: %v", err)
+		if err := testSuite.Stop(context.Background()); err != nil {
+			log.Fatalf("Failed to stop test suite: %v", err)
 		}
 	}()
 
-	db = env.DB
-	redisCli = env.Redis
+	redisContainer, err := testredis.Run(ctx, "redis:7-alpine")
+	if err != nil {
+		panic(fmt.Errorf("failed to start redis container: %w", err))
+	}
+	defer func() {
+		if err := redisContainer.Terminate(context.Background()); err != nil {
+			log.Fatalf("Failed to terminate redis container: %v", err)
+		}
+	}()
+
+	endpoint, err := redisContainer.ConnectionString(ctx)
+	if err != nil {
+		panic(fmt.Errorf("failed to get redis connection string: %w", err))
+	}
+
+	// Use a plain gorm connection without tracing to avoid polluting Example test output
+	db, err = gorm.Open(postgres.Open(testSuite.DSN()), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to open plain DB: %v", err)
+	}
+	redisCli = redis.NewClient(&redis.Options{
+		Addr: strings.TrimPrefix(endpoint, "redis://"),
+	})
+	defer func() { _ = redisCli.Close() }()
 
 	// Create SQL rate limiter and migrate table
 	sqlLimiter, err := sqlrl.New(db, "kvs")
@@ -42,7 +66,6 @@ func TestMain(m *testing.M) {
 	}
 
 	// Use Migrate method to create the table
-	ctx := context.Background()
 	if err := sqlLimiter.Migrate(ctx); err != nil {
 		log.Fatalf("Failed to migrate table: %v", err)
 	}

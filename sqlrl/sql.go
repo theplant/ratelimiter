@@ -53,13 +53,13 @@ func New(db *gorm.DB, tableName string) (*RateLimiter, error) {
 	// Build raw query based on database type
 	// Prioritize real-time accuracy for precise rate limiting
 	var currentTimestampQuery string
-	switch db.Dialector.Name() {
+	switch db.Name() {
 	case "mysql":
 		currentTimestampQuery = "SYSDATE(6)" // MySQL: real-time timestamp with microsecond precision
 	case "postgres":
 		currentTimestampQuery = "clock_timestamp()" // PostgreSQL: real-time timestamp for maximum accuracy
 	default:
-		return nil, errors.Errorf("unsupported dialect %q, must be mysql or postgres", db.Dialector.Name())
+		return nil, errors.Errorf("unsupported dialect %q, must be mysql or postgres", db.Name())
 	}
 
 	s.selectQuery = fmt.Sprintf(`
