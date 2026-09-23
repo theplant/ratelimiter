@@ -62,6 +62,14 @@ func New(db *gorm.DB, tableName string) (*RateLimiter, error) {
 		return nil, errors.Errorf("unsupported dialect %q, must be mysql or postgres", db.Name())
 	}
 
+	// The queries below interpolate SQL *identifiers* — the table name and the two
+	// column names — because identifiers cannot be bound as query parameters. None
+	// of them is request data: tableName is what the embedding application passes to
+	// New (a constant, or a value from its own configuration — the same configuration
+	// that carries the database DSN, so whoever can set it can already reach the
+	// database directly), and the column names are package-level values this package
+	// owns. Every request-derived value is bound: see attempt, which passes req.Key
+	// and the timestamps as `?` arguments.
 	s.selectQuery = fmt.Sprintf(`
 	WITH kv_select AS (
 		SELECT %s, %s FROM %s WHERE %s = ? FOR UPDATE
@@ -73,11 +81,11 @@ func New(db *gorm.DB, tableName string) (*RateLimiter, error) {
 
 	s.insertQuery = fmt.Sprintf(`
 		INSERT INTO %s (%s, %s) VALUES (?, ?)
-	`, s.tableName, ColumnKey, ColumnTimeToAct)
+	`, s.tableName, ColumnKey, ColumnTimeToAct) // nosec — SQL identifier, not request data (see above)
 
 	s.updateQuery = fmt.Sprintf(`
 		UPDATE %s SET %s = ? WHERE %s = ?
-	`, s.tableName, ColumnTimeToAct, ColumnKey)
+	`, s.tableName, ColumnTimeToAct, ColumnKey) // nosec — SQL identifier, not request data (see above)
 	return s, nil
 }
 
